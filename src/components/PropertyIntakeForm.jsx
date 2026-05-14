@@ -85,7 +85,7 @@ export default function PropertyIntakeForm() {
 
   useGooglePlaces(addressInputRef, handlePlaceSelect)
 
-  const canSubmit = address.length > 4 && propertyType && scope.length > 20 && !loading
+  const canSubmit = address.length > 4 && propertyType && scope.length > 5 && !loading
 
   const handleSubmit = async () => {
     if (!canSubmit) return
