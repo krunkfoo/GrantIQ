@@ -1,22 +1,7 @@
-import { auth } from './auth.js'
-import { NextResponse } from 'next/server'
+import NextAuth from 'next-auth'
+import { authConfig } from './auth.config.js'
 
-const publicPaths = ['/', '/demo', '/sign-in', '/sign-up', '/api/auth']
-
-function isPublic(pathname) {
-  return publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))
-}
-
-export default auth((req) => {
-  const { pathname } = req.nextUrl
-  if (isPublic(pathname)) return NextResponse.next()
-  if (!req.auth) {
-    const url = new URL('/sign-in', req.url)
-    url.searchParams.set('callbackUrl', req.url)
-    return NextResponse.redirect(url)
-  }
-  return NextResponse.next()
-})
+export const { auth: middleware } = NextAuth(authConfig)
 
 export const config = {
   matcher: [

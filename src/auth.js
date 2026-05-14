@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs'
 import { eq } from 'drizzle-orm'
 import { db } from './db/index.js'
 import { users } from './db/schema.js'
+import { authConfig } from './auth.config.js'
 
 const providers = [
   Credentials({
@@ -37,9 +38,10 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers,
-  session: { strategy: 'jwt' },
   callbacks: {
+    ...authConfig.callbacks,
     async jwt({ token, user, account }) {
       if (user) {
         if (account?.provider === 'google') {
@@ -62,9 +64,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token
     },
     async session({ session, token }) {
-      if (token.userId) session.user.id = token.userId
+      if (token.userId) session.user.id = String(token.userId)
       return session
     },
   },
-  pages: { signIn: '/sign-in' },
 })
