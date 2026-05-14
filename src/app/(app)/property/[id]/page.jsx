@@ -1,14 +1,16 @@
-import { auth } from '@clerk/nextjs/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '../../../../lib/auth.js'
 import { db } from '../../../../db/index.js'
 import { properties, grantWorkbooks, grantStates, checklistStates } from '../../../../db/schema.js'
 import { eq, and } from 'drizzle-orm'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { grants as allGrants } from '../../../../data/grants.js'
 import GrantWorkbookClient from '../../../../components/GrantWorkbook.jsx'
 
 export default async function PropertyPage({ params }) {
   const { id } = await params
-  const { userId } = await auth()
+  const session = await getServerSession(authOptions)
+  const userId = session.user.id
 
   const [property] = await db
     .select()

@@ -1,11 +1,13 @@
-import { auth } from '@clerk/nextjs/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '../../../lib/auth.js'
 import { db } from '../../../db/index.js'
 import { properties } from '../../../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
 import Link from 'next/link'
 
 export default async function DashboardPage() {
-  const { userId } = await auth()
+  const session = await getServerSession(authOptions)
+  const userId = session.user.id
   const userProperties = await db
     .select()
     .from(properties)

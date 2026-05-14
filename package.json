@@ -11,16 +11,18 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.12.12",
     "@fontsource/geist": "^5.2.8",
     "@fontsource/geist-mono": "^5.2.7",
+    "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.43.1",
     "next": "^15.3.3",
+    "next-auth": "^4.24.14",
     "pg": "^8.16.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/pg": "^8.11.14",
     "autoprefixer": "^10.5.0",
     "drizzle-kit": "^0.31.1",

@@ -1,17 +1,29 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { getToken } from 'next-auth/jwt'
 import { NextResponse } from 'next/server'
 
-const isPublic = createRouteMatcher(['/', '/demo(.*)', '/sign-in(.*)', '/sign-up(.*)'])
+const publicPaths = ['/', '/demo', '/sign-in', '/sign-up', '/api/auth']
 
-const hasValidKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.startsWith('pk_')
-  && !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.includes('placeholder')
+function isPublic(pathname) {
+  return publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))
+}
 
-export default hasValidKey
-  ? clerkMiddleware(async (auth, req) => {
-      if (!isPublic(req)) await auth.protect()
-    })
-  : () => NextResponse.next()
+export async function middleware(req) {
+  const { pathname } = req.nextUrl
+  if (isPublic(pathname)) return NextResponse.next()
+
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+  if (!token) {
+    const signIn = new URL('/sign-in', req.url)
+    signIn.searchParams.set('callbackUrl', req.url)
+    return NextResponse.redirect(signIn)
+  }
+
+  return NextResponse.next()
+}
 
 export const config = {
-  matcher: ['/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)', '/(api|trpc)(.*)'],
+  matcher: [
+    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    '/(api|trpc)(.*)',
+  ],
 }

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
-import { UserButton } from '@clerk/nextjs'
 import Link from 'next/link'
+import SignOutButton from '../../components/SignOutButton.jsx'
 
 export default function AppLayout({ children }) {
   return (
@@ -14,7 +14,7 @@ export default function AppLayout({ children }) {
           <Link href="/property/new" className="text-xs px-3 py-1.5 bg-clay text-white rounded-lg hover:bg-clay-dark transition-colors font-medium">
             + New property
           </Link>
-          <UserButton afterSignOutUrl="/" />
+          <SignOutButton />
         </div>
       </nav>
       <main className="flex-1">{children}</main>

@@ -1,4 +1,5 @@
-import { auth } from '@clerk/nextjs/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '../../../../../lib/auth.js'
 import { db } from '../../../../../db/index.js'
 import { grantStates, checklistStates, statusHistory, grantWorkbooks, properties } from '../../../../../db/schema.js'
 import { eq, and } from 'drizzle-orm'
@@ -20,12 +21,12 @@ async function getGrantState(userId, propertyId, grantId) {
 }
 
 export async function PATCH(req, { params }) {
-  const { userId } = await auth()
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { propertyId, grantId } = await params
   const body = await req.json()
-  const state = await getGrantState(userId, propertyId, grantId)
+  const state = await getGrantState(session.user.id, propertyId, grantId)
   if (!state) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Update workflow status

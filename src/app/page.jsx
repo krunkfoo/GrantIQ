@@ -1,12 +1,13 @@
 export const dynamic = 'force-dynamic'
 
-import { auth } from '@clerk/nextjs/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '../lib/auth.js'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
 export default async function LandingPage() {
-  const { userId } = await auth()
-  if (userId) redirect('/dashboard')
+  const session = await getServerSession(authOptions)
+  if (session) redirect('/dashboard')
 
   return (
     <div className="min-h-screen bg-surface flex flex-col">

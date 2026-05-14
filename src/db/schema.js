@@ -1,5 +1,13 @@
 import { pgTable, uuid, text, boolean, integer, timestamp } from 'drizzle-orm/pg-core'
 
+export const users = pgTable('grantiq_users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash'),
+  name: text('name'),
+  createdAt: timestamp('created_at').defaultNow(),
+})
+
 export const properties = pgTable('grantiq_properties', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: text('user_id').notNull(),
