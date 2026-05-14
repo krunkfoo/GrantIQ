@@ -71,6 +71,9 @@ export default function GrantDetailPanel({
 }) {
   const [emailMode, setEmailMode]     = useState('view')
   const [emailBody, setEmailBody]     = useState(grant.emailBody || grant.draftEmail?.body || '')
+  const [draftEmail, setDraftEmail]   = useState(grant.draftEmail || null)
+  const [draftLoading, setDraftLoading] = useState(false)
+  const [draftError, setDraftError]   = useState(null)
   const [saving, setSaving]           = useState(false)
   const [replyMode, setReplyMode]     = useState(false)
   const [replyText, setReplyText]     = useState('')
@@ -115,6 +118,29 @@ export default function GrantDetailPanel({
   }
 
   const handleCopy = () => navigator.clipboard.writeText(emailBody)
+
+  const handleGenerateDraft = async () => {
+    setDraftLoading(true)
+    setDraftError(null)
+    try {
+      const res = await fetch('/api/grants/draft-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId, grant }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setDraftEmail(data.draft)
+        setEmailBody(data.draft.body)
+      } else {
+        setDraftError(data.error || 'Failed to generate draft')
+      }
+    } catch (e) {
+      setDraftError(e.message)
+    } finally {
+      setDraftLoading(false)
+    }
+  }
 
   const isIneligible  = grant.status === 'ineligible'
   const checkedCount  = (grant.checklist || []).filter(c => c.done).length
@@ -242,17 +268,33 @@ export default function GrantDetailPanel({
           )}
 
           {/* Pre-drafted email */}
-          {grant.draftEmail && !isIneligible && (
+          {!isIneligible && (
             <div className="dp-section">
-              <h4>Pre-drafted email</h4>
+              <h4>Draft email</h4>
+              {!draftEmail && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={handleGenerateDraft}
+                    disabled={draftLoading}
+                    style={{ alignSelf: 'flex-start' }}
+                  >
+                    {draftLoading ? 'Generating…' : '✦ Generate draft email'}
+                  </button>
+                  {draftError && (
+                    <span style={{ fontSize: 12, color: 'var(--st-bad)' }}>{draftError}</span>
+                  )}
+                </div>
+              )}
+              {draftEmail && (
               <div className="email-card">
                 <div className="email-row">
                   <span className="ek">To</span>
-                  <span className="ev" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{grant.draftEmail.to}</span>
+                  <span className="ev" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{draftEmail.to}</span>
                 </div>
                 <div className="email-row">
                   <span className="ek">Subject</span>
-                  <span className="ev">{grant.draftEmail.subject}</span>
+                  <span className="ev">{draftEmail.subject}</span>
                 </div>
                 <div className="email-row body-row">
                   {emailMode === 'view'
@@ -295,6 +337,7 @@ export default function GrantDetailPanel({
                   )}
                 </div>
               </div>
+              )}
 
               {demo && (
                 <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 10 }}>

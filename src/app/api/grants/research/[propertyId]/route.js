@@ -41,37 +41,29 @@ Rules:
 3. Include city/county programs SPECIFIC to this jurisdiction (SF Shines, Richmond grants, Sonoma TIF, etc.). Only include local programs that actually exist for this city/county — do not invent programs.
 4. Flag ineligible programs with exact reasons (wrong jurisdiction, wrong property type, wrong use, etc.)
 5. Use real contacts: actual program administrator names, emails, phone numbers, and application URLs where you know them. Mark as "Confirm current contact" if uncertain.
-6. Draft emails should use the actual property address and project scope — no brackets or placeholder text.
-7. Be specific about dollar amounts. Use ranges. Never say "varies" without a range.
-8. Rank eligible grants by est. value (highest first).
+6. Be specific about dollar amounts. Use ranges. Never say "varies" without a range.
+7. Rank eligible grants by est. value (highest first).
+8. Keep checklist labels SHORT (under 8 words each). Keep steps SHORT (1 sentence each). Max 5 steps and 5 checklist items per grant.
 
-Return a JSON array. Each element must match this exact schema:
+Return a JSON array. Each element must match this EXACT schema (no extra fields):
 {
   "id": "kebab-case-id",
   "name": "Full program name",
   "type": "Federal" | "State" | "Local" | "Regulatory",
   "estValue": "$X–$Y or X% of QREs",
   "estValueNum": 50000,
-  "useFor": "Plain-English description of what project scope this covers",
+  "useFor": "One sentence: what project scope this covers",
   "status": "eligible" | "ineligible" | "watch",
   "ineligibleReason": "Specific reason if ineligible, null otherwise",
   "deadline": "Specific deadline or 'Rolling' or 'Annual — typically [month]'",
-  "applicationLink": "https://... (real URL or null)",
+  "applicationLink": "https://... or null",
   "eligibilityChecks": [
-    { "label": "Requirement description", "pass": true | false | null }
+    { "label": "Short requirement label", "pass": true | false | null }
   ],
   "checklist": [
-    { "label": "Action item", "done": false }
+    { "label": "Short action item", "done": false }
   ],
-  "steps": [
-    "Step 1: ...",
-    "Step 2: ..."
-  ],
-  "draftEmail": {
-    "to": "Name <email@domain.com>",
-    "subject": "Subject line with actual address",
-    "body": "Full email body — use actual address and project scope. Sign off with [Your name] and [Your email] only."
-  } | null,
+  "steps": ["Step 1 sentence.", "Step 2 sentence."],
   "contact": {
     "name": "First Last",
     "title": "Title",
@@ -80,10 +72,10 @@ Return a JSON array. Each element must match this exact schema:
   } | null,
   "hireRecommendation": {
     "needed": true | false,
-    "reason": "Specific reason referencing this property",
-    "firm": "Firm name if applicable",
-    "contact": "Contact name",
-    "email": "firm@email.com"
+    "reason": "One sentence referencing this property",
+    "firm": "Firm name or null",
+    "contact": "Contact name or null",
+    "email": "firm@email.com or null"
   }
 }
 
@@ -115,15 +107,39 @@ export async function POST(req, { params }) {
   try {
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
+      max_tokens: 16000,
+      betas: ['output-128k-2025-02-19'],
       messages: [{ role: 'user', content: buildPrompt(property) }],
     })
 
     const raw = message.content[0].text.trim()
 
     // Strip any accidental markdown fences
-    const jsonText = raw.startsWith('[') ? raw : raw.replace(/^```json?\n?/, '').replace(/\n?```$/, '')
-    const grants = JSON.parse(jsonText)
+    const stripped = raw.startsWith('[') ? raw : raw.replace(/^```json?\n?/, '').replace(/\n?```$/, '')
+
+    // Detect truncation — if stop_reason is max_tokens the JSON is incomplete
+    if (message.stop_reason === 'max_tokens') {
+      throw new Error('Claude response was truncated (max_tokens reached). The property scope may be too broad — try narrowing the project description.')
+    }
+
+    let grants
+    try {
+      grants = JSON.parse(stripped)
+    } catch (parseErr) {
+      // Attempt to salvage a partial array by closing it
+      const lastComma = stripped.lastIndexOf(',')
+      const truncated = lastComma > 0 ? stripped.slice(0, lastComma) + ']' : null
+      if (truncated) {
+        try {
+          grants = JSON.parse(truncated)
+          console.warn('Salvaged partial grants array — some grants may be missing')
+        } catch {
+          throw new Error(`JSON parse failed: ${parseErr.message}. Response length: ${stripped.length} chars. stop_reason: ${message.stop_reason}`)
+        }
+      } else {
+        throw new Error(`JSON parse failed: ${parseErr.message}. Response length: ${stripped.length} chars.`)
+      }
+    }
 
     // Save researched grants to workbook
     await db.update(grantWorkbooks)
