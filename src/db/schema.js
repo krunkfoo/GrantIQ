@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, integer, timestamp } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, boolean, integer, timestamp, jsonb } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('grantiq_users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -23,6 +23,8 @@ export const properties = pgTable('grantiq_properties', {
 export const grantWorkbooks = pgTable('grantiq_workbooks', {
   id: uuid('id').primaryKey().defaultRandom(),
   propertyId: uuid('property_id').notNull().references(() => properties.id, { onDelete: 'cascade' }),
+  researchStatus: text('research_status').default('pending'), // pending | running | done | error
+  researchedGrants: jsonb('researched_grants'),              // null until research completes
   createdAt: timestamp('created_at').defaultNow(),
 })
 

@@ -3,9 +3,8 @@ import { db } from '../../../../db/index.js'
 import { properties, grantWorkbooks, grantStates, checklistStates } from '../../../../db/schema.js'
 import { eq, and } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
-import { grants as allGrants } from '../../../../data/grants.js'
-import { renderGrant } from '../../../../data/grantTemplates.js'
 import GrantWorkbookClient from '../../../../components/GrantWorkbook.jsx'
+import ResearchingLoader from '../../../../components/ResearchingLoader.jsx'
 
 export default async function PropertyPage({ params }) {
   const { id } = await params
@@ -30,20 +29,22 @@ export default async function PropertyPage({ params }) {
   if (!workbook) {
     ;[workbook] = await db
       .insert(grantWorkbooks)
-      .values({ propertyId: id })
+      .values({ propertyId: id, researchStatus: 'pending' })
       .returning()
+  }
 
-    await db.insert(grantStates).values(
-      allGrants.map(g => ({
-        workbookId: workbook.id,
-        grantId: g.id,
-        workflowStatus: g.status === 'ineligible' ? 'Ineligible' : 'Not started',
-        // Don't pre-save emailBody — render from template at display time
-        // so it always uses the actual property values
-        emailBody: null,
-      }))
+  // Research not done yet — show animated loader (triggers research client-side)
+  if (workbook.researchStatus !== 'done') {
+    return (
+      <ResearchingLoader
+        propertyId={id}
+        address={`${property.address}${property.city ? `, ${property.city}` : ''}`}
+      />
     )
   }
+
+  // Research complete — merge grants with user state
+  const aiGrants = workbook.researchedGrants ?? []
 
   const states = await db
     .select()
@@ -51,23 +52,26 @@ export default async function PropertyPage({ params }) {
     .where(eq(grantStates.workbookId, workbook.id))
 
   const allChecklists = await db
-    .select({ grantStateId: checklistStates.grantStateId, itemIndex: checklistStates.itemIndex, done: checklistStates.done })
+    .select({
+      grantStateId: checklistStates.grantStateId,
+      itemIndex: checklistStates.itemIndex,
+      done: checklistStates.done,
+    })
     .from(checklistStates)
     .innerJoin(grantStates, eq(checklistStates.grantStateId, grantStates.id))
     .where(eq(grantStates.workbookId, workbook.id))
 
-  const mergedGrants = allGrants.map(g => {
-    const rendered = renderGrant(g, property)
+  const mergedGrants = aiGrants.map(g => {
     const state = states.find(s => s.grantId === g.id)
     const itemChecks = allChecklists.filter(c => c.grantStateId === state?.id)
     return {
-      ...rendered,
+      ...g,
       stateId: state?.id ?? null,
-      workflowStatus: state?.workflowStatus ?? rendered.workflowStatus,
-      // Use user-edited email from DB if it exists; otherwise render from template
-      emailBody: state?.emailBody ?? rendered.draftEmail?.body ?? '',
+      workflowStatus: state?.workflowStatus ?? (g.status === 'ineligible' ? 'Ineligible' : 'Not started'),
+      // User-edited email body takes precedence; otherwise use Claude's draft
+      emailBody: state?.emailBody ?? g.draftEmail?.body ?? '',
       notes: state?.notes ?? '',
-      checklist: rendered.checklist.map((item, i) => {
+      checklist: (g.checklist ?? []).map((item, i) => {
         const saved = itemChecks.find(c => c.itemIndex === i)
         return { ...item, done: saved ? saved.done : item.done }
       }),
