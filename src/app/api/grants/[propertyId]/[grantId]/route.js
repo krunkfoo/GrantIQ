@@ -1,12 +1,10 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '../../../../../lib/auth.js'
+import { getToken } from 'next-auth/jwt'
 import { db } from '../../../../../db/index.js'
 import { grantStates, checklistStates, statusHistory, grantWorkbooks, properties } from '../../../../../db/schema.js'
 import { eq, and } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 
 async function getGrantState(userId, propertyId, grantId) {
-  // Verify ownership
   const [prop] = await db.select().from(properties)
     .where(and(eq(properties.id, propertyId), eq(properties.userId, userId))).limit(1)
   if (!prop) return null
@@ -21,15 +19,14 @@ async function getGrantState(userId, propertyId, grantId) {
 }
 
 export async function PATCH(req, { params }) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+  if (!token?.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { propertyId, grantId } = await params
   const body = await req.json()
-  const state = await getGrantState(session.user.id, propertyId, grantId)
+  const state = await getGrantState(token.userId, propertyId, grantId)
   if (!state) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Update workflow status
   if (body.workflowStatus !== undefined || body.emailBody !== undefined || body.notes !== undefined) {
     const updates = {}
     if (body.workflowStatus !== undefined) updates.workflowStatus = body.workflowStatus
@@ -38,7 +35,6 @@ export async function PATCH(req, { params }) {
     updates.updatedAt = new Date()
     await db.update(grantStates).set(updates).where(eq(grantStates.id, state.id))
 
-    // Log status change
     if (body.workflowStatus !== undefined) {
       await db.insert(statusHistory).values({
         grantStateId: state.id,
@@ -48,7 +44,6 @@ export async function PATCH(req, { params }) {
     }
   }
 
-  // Update a checklist item
   if (body.checklistIndex !== undefined && body.done !== undefined) {
     const existing = await db.select().from(checklistStates)
       .where(and(eq(checklistStates.grantStateId, state.id), eq(checklistStates.itemIndex, body.checklistIndex)))
