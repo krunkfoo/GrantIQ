@@ -31,11 +31,38 @@ function CheckIcon({ pass }) {
   )
 }
 
-export default function GrantDetailPanel({ grant, demo, propertyId, onClose, onStatusChange, onEmailSave, onChecklistToggle }) {
+export default function GrantDetailPanel({ grant, demo, propertyId, onClose, onStatusChange, onEmailSave, onChecklistToggle, onReplyLogged }) {
   const [emailMode, setEmailMode] = useState('view')
   const [emailBody, setEmailBody] = useState(grant.emailBody || grant.draftEmail?.body || '')
   const [activeTab, setActiveTab] = useState('overview')
   const [saving, setSaving] = useState(false)
+  const [replyMode, setReplyMode] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [replyLoading, setReplyLoading] = useState(false)
+  const [replyResult, setReplyResult] = useState(null)
+
+  const handleLogReply = async () => {
+    if (!replyText.trim()) return
+    setReplyLoading(true)
+    setReplyResult(null)
+    try {
+      const res = await fetch(`/api/grants/${propertyId}/${grant.id}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailContent: replyText }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setReplyResult(data)
+        onStatusChange(grant.id, data.status)
+        if (onReplyLogged) onReplyLogged(data)
+        setReplyText('')
+        setReplyMode(false)
+      }
+    } finally {
+      setReplyLoading(false)
+    }
+  }
 
   const checkedCount = grant.checklist.filter(c => c.done).length
 
@@ -291,7 +318,69 @@ export default function GrantDetailPanel({ grant, demo, propertyId, onClose, onS
 
           {activeTab === 'history' && (
             <div>
-              <h3 className="text-xs font-medium text-subtle uppercase tracking-wider mb-4">Status history</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-medium text-subtle uppercase tracking-wider">Status history</h3>
+                {!demo && grant.status === 'eligible' && !replyMode && (
+                  <button
+                    onClick={() => setReplyMode(true)}
+                    className="text-xs px-3 py-1.5 bg-clay text-white rounded-lg hover:bg-clay-dark transition-colors font-medium"
+                  >
+                    + Log a reply
+                  </button>
+                )}
+              </div>
+
+              {/* Reply logging panel */}
+              {replyMode && (
+                <div className="mb-5 border border-clay/30 rounded-xl bg-amber-50/30 p-4">
+                  <p className="text-xs font-medium text-ink mb-2">Paste the reply you received</p>
+                  <textarea
+                    value={replyText}
+                    onChange={e => setReplyText(e.target.value)}
+                    rows={8}
+                    placeholder="Paste the email reply here — Claude will parse the status, extract next steps, and surface any new programs mentioned..."
+                    className="w-full text-sm text-ink bg-white border border-border rounded-lg p-3 leading-relaxed resize-none focus:outline-none focus:border-clay transition-colors"
+                  />
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={handleLogReply}
+                      disabled={replyLoading || !replyText.trim()}
+                      className="px-4 py-1.5 bg-clay text-white text-xs rounded-lg font-medium hover:bg-clay-dark transition-colors disabled:opacity-50"
+                    >
+                      {replyLoading ? 'Analyzing…' : 'Analyze & log reply'}
+                    </button>
+                    <button
+                      onClick={() => { setReplyMode(false); setReplyText('') }}
+                      className="px-4 py-1.5 text-xs text-muted hover:text-ink border border-border rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Reply result */}
+              {replyResult && (
+                <div className="mb-5 bg-green-50 border border-green-100 rounded-xl p-4">
+                  <div className="font-medium text-sm text-green-800 mb-1">{replyResult.status}</div>
+                  <p className="text-xs text-green-700 leading-relaxed">{replyResult.note}</p>
+                  {replyResult.nextAction && (
+                    <p className="text-xs text-green-700 mt-2 font-medium">Next: {replyResult.nextAction}</p>
+                  )}
+                  {replyResult.newGrants?.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-green-200">
+                      <p className="text-xs font-medium text-green-800 mb-1">
+                        {replyResult.newGrants.length} new program{replyResult.newGrants.length > 1 ? 's' : ''} added to your workbook:
+                      </p>
+                      {replyResult.newGrants.map(g => (
+                        <div key={g.id} className="text-xs text-green-700">• {g.name} — {g.estValue}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Timeline */}
               <div className="relative">
                 <div className="absolute left-3 top-2 bottom-2 w-px bg-border" />
                 <div className="space-y-4">
@@ -301,12 +390,12 @@ export default function GrantDetailPanel({ grant, demo, propertyId, onClose, onS
                       <div>
                         <div className="text-xs font-mono text-muted">{new Date(event.createdAt || event.date).toLocaleDateString()}</div>
                         <div className="text-sm text-ink font-medium mt-0.5">{event.event}</div>
-                        {event.note && <div className="text-xs text-subtle mt-0.5">{event.note}</div>}
+                        {event.note && <div className="text-xs text-subtle mt-0.5 leading-relaxed">{event.note}</div>}
                       </div>
                     </div>
                   ))}
-                  {(!grant.statusHistory || grant.statusHistory.length === 0) && (
-                    <p className="text-xs text-muted pl-8">No status changes yet.</p>
+                  {(!grant.statusHistory || grant.statusHistory.length === 0) && !replyResult && (
+                    <p className="text-xs text-muted pl-8">No status changes yet. Send an email and log the reply here.</p>
                   )}
                 </div>
               </div>

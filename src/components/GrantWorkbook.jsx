@@ -146,12 +146,14 @@ function GrantCard({ grant, onClick }) {
   )
 }
 
-export default function GrantWorkbook({ property, grants: initialGrants, workbookId, demo }) {
+export default function GrantWorkbook({ property, grants: initialGrants, workbookId, demo, gmailConnected }) {
   const [grants, setGrants] = useState(initialGrants)
   const [view, setView] = useState('table')
   const [selectedGrant, setSelectedGrant] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState(null)
 
   const persist = useCallback(async (grantId, patch) => {
     if (demo || !workbookId) return
@@ -178,6 +180,51 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
     updateGrant(grantId, { emailBody })
     persist(grantId, { emailBody })
   }, [updateGrant, persist])
+
+  const handleReplyLogged = useCallback((data) => {
+    // Note: status update is handled by onStatusChange in the panel itself
+    // Here we just merge any new grants discovered from the reply
+    if (data.newGrants?.length > 0) {
+      setGrants(prev => {
+        const existingIds = new Set(prev.map(g => g.id))
+        const toAdd = data.newGrants
+          .filter(g => !existingIds.has(g.id))
+          .map(g => ({
+            ...g,
+            workflowStatus: 'Not started',
+            checklist: g.checklist ?? [],
+            eligibilityChecks: g.eligibilityChecks ?? [],
+            steps: g.steps ?? [],
+          }))
+        return toAdd.length > 0 ? [...prev, ...toAdd] : prev
+      })
+    }
+  }, [updateGrant])
+
+  const handleSyncInbox = useCallback(async () => {
+    if (demo || syncing) return
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const res = await fetch(`/api/inbox/sync/${property.id}`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        setSyncResult({ error: data.error ?? `HTTP ${res.status}`, gmailRequired: data.gmailRequired })
+      } else {
+        setSyncResult({ updates: data.updates, scanned: data.scanned, message: data.message })
+        // Apply any status updates returned
+        if (data.updates?.length > 0) {
+          data.updates.forEach(u => {
+            updateGrant(u.grantId, { workflowStatus: u.status })
+          })
+        }
+      }
+    } catch (err) {
+      setSyncResult({ error: err.message })
+    } finally {
+      setSyncing(false)
+    }
+  }, [demo, syncing, property.id, updateGrant])
 
   const handleChecklistToggle = useCallback((grantId, itemIndex, done) => {
     setGrants(prev => prev.map(g => {
@@ -232,7 +279,7 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
             <h1 className="text-xl font-semibold text-ink tracking-tight">{property.address}</h1>
             <p className="text-sm text-muted mt-0.5">{property.city} · {property.propertyType}</p>
           </div>
-          <div className="flex gap-6 sm:gap-8 flex-wrap">
+          <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
             {[
               { value: eligibleGrants.length, label: 'eligible grants' },
               { value: `${formatValue(totalValue)}+`, label: 'total value', clay: true },
@@ -244,9 +291,53 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
                 <div className="text-xs text-muted">{s.label}</div>
               </div>
             ))}
+            {!demo && (
+              <button
+                onClick={handleSyncInbox}
+                disabled={syncing}
+                title={gmailConnected ? 'Scan your inbox for grant replies' : 'Sign in with Google to enable inbox sync'}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  gmailConnected
+                    ? 'border-clay/40 text-clay hover:bg-clay-light/40'
+                    : 'border-border text-muted cursor-not-allowed'
+                } ${syncing ? 'opacity-60' : ''}`}
+              >
+                {syncing ? (
+                  <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                ) : (
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M1 6a5 5 0 009.9-1M11 6a5 5 0 00-9.9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M9 2l1.9 3M3 10L1.1 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                )}
+                {syncing ? 'Syncing…' : 'Sync inbox'}
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Sync result banner */}
+      {syncResult && (
+        <div className={`px-6 py-2.5 text-xs flex items-center justify-between gap-3 ${
+          syncResult.error ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-800'
+        }`}>
+          <span>
+            {syncResult.error
+              ? syncResult.gmailRequired
+                ? 'Gmail not connected — sign in with Google to enable inbox sync.'
+                : `Sync failed: ${syncResult.error}`
+              : syncResult.message
+                ? syncResult.message
+                : `Scanned ${syncResult.scanned} thread${syncResult.scanned !== 1 ? 's' : ''} — ${syncResult.updates?.length ?? 0} grant${syncResult.updates?.length !== 1 ? 's' : ''} updated.`
+            }
+          </span>
+          <button onClick={() => setSyncResult(null)} className="text-current opacity-60 hover:opacity-100">✕</button>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="border-b border-border bg-surface/95 backdrop-blur-sm px-6 py-3 sticky top-[57px] z-20">
@@ -325,6 +416,7 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
           onStatusChange={handleStatusChange}
           onEmailSave={handleEmailSave}
           onChecklistToggle={handleChecklistToggle}
+          onReplyLogged={handleReplyLogged}
         />
       )}
     </div>
