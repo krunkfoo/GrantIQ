@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
 const PROPERTY_TYPES = [
@@ -17,11 +17,60 @@ const BUDGET_OPTIONS = [
   { label: 'Over $3M', value: '>3m' },
 ]
 
+function useGooglePlaces(inputRef, onSelect) {
+  useEffect(() => {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
+    if (!apiKey || !inputRef.current) return
+
+    // Load Google Maps script if not already loaded
+    if (!window.google?.maps?.places) {
+      const script = document.createElement('script')
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`
+      script.async = true
+      script.onload = () => attachAutocomplete(inputRef.current, onSelect)
+      document.head.appendChild(script)
+    } else {
+      attachAutocomplete(inputRef.current, onSelect)
+    }
+  }, [inputRef, onSelect])
+}
+
+function attachAutocomplete(input, onSelect) {
+  if (!input || !window.google?.maps?.places) return
+
+  const autocomplete = new window.google.maps.places.Autocomplete(input, {
+    types: ['address'],
+    componentRestrictions: { country: 'us' },
+    fields: ['address_components', 'formatted_address'],
+  })
+
+  autocomplete.addListener('place_changed', () => {
+    const place = autocomplete.getPlace()
+    if (!place.address_components) return
+
+    const components = place.address_components
+    const get = (type) => components.find(c => c.types.includes(type))?.long_name ?? ''
+    const getShort = (type) => components.find(c => c.types.includes(type))?.short_name ?? ''
+
+    const streetNumber = get('street_number')
+    const route = get('route')
+    const city = get('locality') || get('sublocality') || get('neighborhood')
+    const state = getShort('administrative_area_level_1')
+    const zip = get('postal_code')
+
+    onSelect({
+      address: [streetNumber, route].filter(Boolean).join(' '),
+      city: [city, state, zip].filter(Boolean).join(', '),
+    })
+  })
+}
+
 export default function PropertyIntakeForm() {
   const router = useRouter()
+  const addressInputRef = useRef(null)
+
   const [address, setAddress] = useState('')
   const [city, setCity] = useState('')
-  const [showSuggestion, setShowSuggestion] = useState(false)
   const [propertyType, setPropertyType] = useState('')
   const [scope, setScope] = useState('')
   const [budget, setBudget] = useState('unsure')
@@ -29,16 +78,12 @@ export default function PropertyIntakeForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const handleAddressChange = (e) => {
-    setAddress(e.target.value)
-    setShowSuggestion(e.target.value.length > 5)
-  }
+  const handlePlaceSelect = useCallback(({ address: a, city: c }) => {
+    setAddress(a)
+    setCity(c)
+  }, [])
 
-  const handleSuggestionClick = () => {
-    setAddress('50 Washington Ave')
-    setCity('Point Richmond, CA 94801')
-    setShowSuggestion(false)
-  }
+  useGooglePlaces(addressInputRef, handlePlaceSelect)
 
   const canSubmit = address.length > 4 && propertyType && scope.length > 20 && !loading
 
@@ -62,6 +107,9 @@ export default function PropertyIntakeForm() {
     }
   }
 
+  const inputClass = 'w-full px-4 py-3 text-sm bg-white border border-border rounded-lg text-ink placeholder-muted focus:outline-none focus:border-clay focus:ring-1 focus:ring-clay transition-colors'
+  const labelClass = 'block text-xs font-medium text-subtle uppercase tracking-wider mb-2'
+
   return (
     <div className="max-w-lg mx-auto px-6 py-12">
       <div className="mb-10">
@@ -74,52 +122,35 @@ export default function PropertyIntakeForm() {
       </div>
 
       <div className="space-y-6">
-        {/* Address */}
+        {/* Address — Google Places Autocomplete */}
         <div>
-          <label className="block text-xs font-medium text-subtle uppercase tracking-wider mb-2">
-            Property address
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={address}
-              onChange={handleAddressChange}
-              onFocus={() => address.length > 5 && setShowSuggestion(true)}
-              onBlur={() => setTimeout(() => setShowSuggestion(false), 150)}
-              placeholder="123 Main St"
-              className="w-full px-4 py-3 text-sm bg-white border border-border rounded-lg text-ink placeholder-muted focus:outline-none focus:border-clay focus:ring-1 focus:ring-clay transition-colors"
-            />
-            {showSuggestion && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-panel z-10">
-                <button
-                  onMouseDown={handleSuggestionClick}
-                  className="w-full text-left px-4 py-3 text-sm text-ink hover:bg-base transition-colors rounded-lg flex items-center gap-3"
-                >
-                  <div>
-                    <div className="font-medium">50 Washington Ave</div>
-                    <div className="text-xs text-muted">Point Richmond, CA 94801 · NR Historic District</div>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
+          <label className={labelClass}>Property address</label>
+          <input
+            ref={addressInputRef}
+            type="text"
+            value={address}
+            onChange={e => setAddress(e.target.value)}
+            placeholder="123 Main St"
+            className={inputClass}
+            autoComplete="off"
+          />
         </div>
 
         {/* City/State/Zip */}
         <div>
-          <label className="block text-xs font-medium text-subtle uppercase tracking-wider mb-2">City, State, ZIP</label>
+          <label className={labelClass}>City, State, ZIP</label>
           <input
             type="text"
             value={city}
-            onChange={(e) => setCity(e.target.value)}
-            placeholder="Richmond, CA 94801"
-            className="w-full px-4 py-3 text-sm bg-white border border-border rounded-lg text-ink placeholder-muted focus:outline-none focus:border-clay focus:ring-1 focus:ring-clay transition-colors"
+            onChange={e => setCity(e.target.value)}
+            placeholder="San Francisco, CA 94103"
+            className={inputClass}
           />
         </div>
 
         {/* Property type */}
         <div>
-          <label className="block text-xs font-medium text-subtle uppercase tracking-wider mb-2">Property type</label>
+          <label className={labelClass}>Property type</label>
           <div className="flex flex-wrap gap-2">
             {PROPERTY_TYPES.map((type) => (
               <button
@@ -139,22 +170,22 @@ export default function PropertyIntakeForm() {
 
         {/* Scope */}
         <div>
-          <label className="block text-xs font-medium text-subtle uppercase tracking-wider mb-2">
+          <label className={labelClass}>
             Project scope
             <span className="normal-case font-normal text-muted ml-1">— what are you trying to do?</span>
           </label>
           <textarea
             value={scope}
-            onChange={(e) => setScope(e.target.value)}
+            onChange={e => setScope(e.target.value)}
             placeholder="Full rehabilitation including seismic upgrade, facade restoration, interior renovation…"
             rows={4}
-            className="w-full px-4 py-3 text-sm bg-white border border-border rounded-lg text-ink placeholder-muted focus:outline-none focus:border-clay focus:ring-1 focus:ring-clay transition-colors resize-none"
+            className={`${inputClass} resize-none`}
           />
         </div>
 
         {/* Budget */}
         <div>
-          <label className="block text-xs font-medium text-subtle uppercase tracking-wider mb-2">
+          <label className={labelClass}>
             Estimated budget <span className="normal-case font-normal text-muted">— optional</span>
           </label>
           <div className="flex flex-wrap gap-2">
@@ -176,15 +207,15 @@ export default function PropertyIntakeForm() {
 
         {/* Start date */}
         <div>
-          <label className="block text-xs font-medium text-subtle uppercase tracking-wider mb-2">
+          <label className={labelClass}>
             Target start date <span className="normal-case font-normal text-muted">— optional</span>
           </label>
           <input
             type="text"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={e => setStartDate(e.target.value)}
             placeholder="Q3 2026 / Summer 2026 / TBD"
-            className="w-full px-4 py-3 text-sm bg-white border border-border rounded-lg text-ink placeholder-muted focus:outline-none focus:border-clay focus:ring-1 focus:ring-clay transition-colors"
+            className={inputClass}
           />
         </div>
 

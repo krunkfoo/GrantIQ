@@ -4,6 +4,7 @@ import { properties, grantWorkbooks, grantStates, checklistStates } from '../../
 import { eq, and } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
 import { grants as allGrants } from '../../../../data/grants.js'
+import { renderGrant } from '../../../../data/grantTemplates.js'
 import GrantWorkbookClient from '../../../../components/GrantWorkbook.jsx'
 
 export default async function PropertyPage({ params }) {
@@ -37,7 +38,9 @@ export default async function PropertyPage({ params }) {
         workbookId: workbook.id,
         grantId: g.id,
         workflowStatus: g.status === 'ineligible' ? 'Ineligible' : 'Not started',
-        emailBody: g.draftEmail?.body ?? null,
+        // Don't pre-save emailBody — render from template at display time
+        // so it always uses the actual property values
+        emailBody: null,
       }))
     )
   }
@@ -54,15 +57,17 @@ export default async function PropertyPage({ params }) {
     .where(eq(grantStates.workbookId, workbook.id))
 
   const mergedGrants = allGrants.map(g => {
+    const rendered = renderGrant(g, property)
     const state = states.find(s => s.grantId === g.id)
     const itemChecks = allChecklists.filter(c => c.grantStateId === state?.id)
     return {
-      ...g,
+      ...rendered,
       stateId: state?.id ?? null,
-      workflowStatus: state?.workflowStatus ?? g.workflowStatus,
-      emailBody: state?.emailBody ?? g.draftEmail?.body ?? '',
+      workflowStatus: state?.workflowStatus ?? rendered.workflowStatus,
+      // Use user-edited email from DB if it exists; otherwise render from template
+      emailBody: state?.emailBody ?? rendered.draftEmail?.body ?? '',
       notes: state?.notes ?? '',
-      checklist: g.checklist.map((item, i) => {
+      checklist: rendered.checklist.map((item, i) => {
         const saved = itemChecks.find(c => c.itemIndex === i)
         return { ...item, done: saved ? saved.done : item.done }
       }),
