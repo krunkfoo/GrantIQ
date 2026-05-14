@@ -35,7 +35,10 @@ export default function ResearchingLoader({ propertyId, address }) {
 
     // Kick off research
     fetch(`/api/grants/research/${propertyId}`, { method: 'POST' })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) return res.json().then(d => { throw new Error(d.error ?? `HTTP ${res.status}`) })
+        return res.json()
+      })
       .then(data => {
         clearInterval(interval)
         if (data.ok) {
@@ -46,7 +49,7 @@ export default function ResearchingLoader({ propertyId, address }) {
       })
       .catch(err => {
         clearInterval(interval)
-        setError('Network error — please refresh the page.')
+        setError(`Research failed: ${err.message}. Check that ANTHROPIC_API_KEY is set in your deployment.`)
       })
 
     return () => clearInterval(interval)
