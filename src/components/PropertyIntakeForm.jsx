@@ -27,6 +27,7 @@ export default function PropertyIntakeForm() {
   const [budget, setBudget] = useState('unsure')
   const [startDate, setStartDate] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
   const handleAddressChange = (e) => {
     setAddress(e.target.value)
@@ -44,15 +45,19 @@ export default function PropertyIntakeForm() {
   const handleSubmit = async () => {
     if (!canSubmit) return
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch('/api/properties', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address, city, propertyType, scope, budget, startDate }),
       })
+      if (!res.ok) throw new Error(`Server error ${res.status}`)
       const property = await res.json()
+      if (!property.id) throw new Error('Unexpected response from server')
       router.push(`/property/${property.id}`)
-    } catch {
+    } catch (err) {
+      setError('Something went wrong — please try again.')
       setLoading(false)
     }
   }
@@ -182,6 +187,10 @@ export default function PropertyIntakeForm() {
             className="w-full px-4 py-3 text-sm bg-white border border-border rounded-lg text-ink placeholder-muted focus:outline-none focus:border-clay focus:ring-1 focus:ring-clay transition-colors"
           />
         </div>
+
+        {error && (
+          <p className="text-xs text-red-600 text-center -mb-2">{error}</p>
+        )}
 
         <button
           onClick={handleSubmit}

@@ -42,22 +42,13 @@ export default async function PropertyPage({ params }) {
     )
   }
 
-  // Load all grant states + checklist states
+  // Load all grant states
   const states = await db
     .select()
     .from(grantStates)
     .where(eq(grantStates.workbookId, workbook.id))
 
-  const checklists = await db
-    .select()
-    .from(checklistStates)
-    .where(
-      eq(checklistStates.grantStateId,
-        states.length > 0 ? states[0].id : '00000000-0000-0000-0000-000000000000'
-      )
-    )
-
-  // Load all checklists in one query using workbook ID join
+  // Load all checklist states in one query via workbook join
   const allChecklists = await db
     .select({ grantStateId: checklistStates.grantStateId, itemIndex: checklistStates.itemIndex, done: checklistStates.done })
     .from(checklistStates)
