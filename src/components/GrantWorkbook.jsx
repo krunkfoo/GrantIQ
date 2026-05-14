@@ -4,156 +4,329 @@ import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import GrantDetailPanel from './GrantDetailPanel.jsx'
 
-const TYPE_COLORS = {
-  Federal: 'bg-blue-50 text-blue-600 border-blue-100',
-  State: 'bg-purple-50 text-purple-600 border-purple-100',
-  Local: 'bg-amber-50 text-amber-600 border-amber-100',
-}
-
-const STATUS_COLORS = {
-  'Not started': 'bg-base text-muted',
-  'Draft email ready': 'bg-amber-50 text-amber-700',
-  'Contact made': 'bg-blue-50 text-blue-700',
-  'Sent': 'bg-green-50 text-green-700',
-  'Replied': 'bg-green-100 text-green-800',
-  'Ineligible': 'bg-red-50 text-red-600',
-}
+/* ── helpers ─────────────────────────────────────────────── */
 
 function formatValue(num) {
   if (!num) return '—'
-  if (num >= 1000000) return `$${(num / 1000000).toFixed(1)}M`
-  if (num >= 1000) return `$${(num / 1000).toFixed(0)}K`
+  if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(1)}M`
+  if (num >= 1_000) return `$${(num / 1_000).toFixed(0)}K`
   return `$${num.toLocaleString()}`
 }
 
-function CheckBadge({ pass }) {
-  if (pass === true) return <span className="text-green-600 text-xs">✓</span>
-  if (pass === false) return <span className="text-red-500 text-xs">✗</span>
-  return <span className="text-amber-500 text-xs">?</span>
+function typeBadge(type) {
+  if (type === 'Federal') return 'badge-sq federal'
+  if (type === 'State')   return 'badge-sq state'
+  return 'badge-sq city'
 }
 
-function TableRow({ grant, onClick }) {
-  const isIneligible = grant.status === 'ineligible'
+/* ── inline SVG icons ────────────────────────────────────── */
+
+const Icons = {
+  building: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="12" height="11" rx="1"/>
+      <path d="M5 14V9h6v5M5 6h1M8 6h1M11 6h1M5 9h1M11 9h1"/>
+    </svg>
+  ),
+  table: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <rect x="2" y="2" width="12" height="12" rx="1"/>
+      <path d="M2 6h12M2 10h12M6 6v6M10 6v6"/>
+    </svg>
+  ),
+  inbox: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 10l2.5-6h7L14 10"/>
+      <rect x="2" y="10" width="12" height="4" rx="1"/>
+      <path d="M5.5 12.5h5"/>
+    </svg>
+  ),
+  people: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <circle cx="6" cy="5" r="2.5"/>
+      <path d="M1 14c0-2.76 2.24-5 5-5s5 2.24 5 5"/>
+      <circle cx="12" cy="5" r="2" opacity="0.6"/>
+      <path d="M14 14c0-2-1.34-3.72-3.2-4.35" opacity="0.6"/>
+    </svg>
+  ),
+  settings: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <circle cx="8" cy="8" r="2.5"/>
+      <path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.93 3.93l1.06 1.06M11.01 11.01l1.06 1.06M3.93 12.07l1.06-1.06M11.01 4.99l1.06-1.06"/>
+    </svg>
+  ),
+  sync: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <path d="M2 8a6 6 0 0111.2-3M14 8a6 6 0 01-11.2 3"/>
+      <path d="M11.5 2.5l1.7 2.5M4.5 13.5L2.8 11"/>
+    </svg>
+  ),
+  check: (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 6l2.5 2.5 5.5-5.5"/>
+    </svg>
+  ),
+  x: (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M2 2l8 8M10 2l-8 8"/>
+    </svg>
+  ),
+  pin: (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+      <circle cx="6" cy="5" r="2"/>
+      <path d="M6 11C6 11 2 7.5 2 5a4 4 0 018 0c0 2.5-4 6-4 6z"/>
+    </svg>
+  ),
+  clock: (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+      <circle cx="6" cy="6" r="4.5"/>
+      <path d="M6 3.5V6l2 1.5"/>
+    </svg>
+  ),
+  mail: (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="3" width="12" height="8" rx="1"/>
+      <path d="M1 4l6 4 6-4"/>
+    </svg>
+  ),
+  link: (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+      <path d="M4.5 7.5a3 3 0 004.24 0l1.5-1.5a3 3 0 00-4.24-4.24l-.75.75"/>
+      <path d="M7.5 4.5a3 3 0 00-4.24 0L1.76 6a3 3 0 004.24 4.24l.75-.75"/>
+    </svg>
+  ),
+  cards: (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <rect x="1" y="1" width="4" height="4" rx="0.5" fill="currentColor"/>
+      <rect x="7" y="1" width="4" height="4" rx="0.5" fill="currentColor"/>
+      <rect x="1" y="7" width="4" height="4" rx="0.5" fill="currentColor"/>
+      <rect x="7" y="7" width="4" height="4" rx="0.5" fill="currentColor"/>
+    </svg>
+  ),
+  tableSmall: (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <rect x="1" y="1" width="10" height="2" rx="0.5" fill="currentColor"/>
+      <rect x="1" y="5" width="10" height="2" rx="0.5" fill="currentColor"/>
+      <rect x="1" y="9" width="10" height="2" rx="0.5" fill="currentColor"/>
+    </svg>
+  ),
+  search: (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+      <circle cx="5" cy="5" r="3.5"/>
+      <path d="M7.5 7.5L10 10"/>
+    </svg>
+  ),
+}
+
+/* ── eligibility mini-icons ──────────────────────────────── */
+
+function PfIcon({ pass }) {
+  if (pass === true) return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="6.5" cy="6.5" r="6.5" fill="oklch(0.96 0.03 150)"/>
+      <path d="M3.5 6.5l2 2 4-4" stroke="oklch(0.42 0.09 150)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+  if (pass === false) return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="6.5" cy="6.5" r="6.5" fill="oklch(0.97 0.025 25)"/>
+      <path d="M4 4l5 5M9 4l-5 5" stroke="oklch(0.58 0.16 25)" strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>
+  )
   return (
-    <tr
-      onClick={onClick}
-      className={`border-b border-border cursor-pointer transition-colors hover:bg-base/50 ${isIneligible ? 'opacity-40' : ''}`}
-    >
-      <td className="px-3 py-2.5 min-w-[190px]">
-        <div className="text-xs font-medium text-ink leading-tight">{grant.name}</div>
-        {isIneligible && (
-          <div className="text-xs text-red-500 mt-0.5 leading-tight max-w-[170px] truncate" title={grant.ineligibleReason}>
-            {grant.ineligibleReason?.slice(0, 65)}…
-          </div>
-        )}
-      </td>
-      <td className="px-3 py-2.5 min-w-[72px]">
-        <span className={`text-xs px-1.5 py-0.5 rounded border ${TYPE_COLORS[grant.type] || 'bg-base text-muted border-border'}`}>
-          {grant.type}
-        </span>
-      </td>
-      <td className="px-3 py-2.5 min-w-[110px]">
-        <span className={`text-xs font-mono ${isIneligible ? 'text-muted' : 'text-ink font-medium'}`}>
-          {isIneligible ? '—' : grant.estValue}
-        </span>
-      </td>
-      <td className="px-3 py-2.5 min-w-[160px]">
-        <span className="text-xs text-subtle line-clamp-2 leading-tight">{grant.useFor}</span>
-      </td>
-      <td className="px-3 py-2.5 min-w-[90px]">
-        <div className="flex gap-0.5 flex-wrap">
-          {grant.eligibilityChecks.slice(0, 4).map((c, i) => <CheckBadge key={i} pass={c.pass} />)}
-          {grant.eligibilityChecks.length > 4 && <span className="text-xs text-muted">+{grant.eligibilityChecks.length - 4}</span>}
-        </div>
-      </td>
-      <td className="px-3 py-2.5 min-w-[80px]">
-        <span className="font-mono text-xs text-muted">
-          {grant.checklist.filter(c => c.done).length}/{grant.checklist.length}
-        </span>
-      </td>
-      <td className="px-3 py-2.5 min-w-[55px]">
-        <span className="font-mono text-xs text-muted">{grant.steps.length}</span>
-      </td>
-      <td className="px-3 py-2.5 min-w-[80px]">
-        {grant.draftEmail ? <span className="text-xs text-clay font-medium">Ready</span> : <span className="text-xs text-muted">—</span>}
-      </td>
-      <td className="px-3 py-2.5 min-w-[50px]">
-        {grant.link
-          ? <a href={grant.link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-clay hover:underline">Link ↗</a>
-          : <span className="text-muted text-xs">—</span>}
-      </td>
-      <td className="px-3 py-2.5 min-w-[140px]">
-        {grant.contact
-          ? <div><div className="text-xs font-medium text-ink">{grant.contact.name}</div><div className="text-xs text-muted truncate max-w-[130px]">{grant.contact.title}</div></div>
-          : <span className="text-muted text-xs">—</span>}
-      </td>
-      <td className="px-3 py-2.5 min-w-[140px]">
-        <div>
-          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[grant.workflowStatus] || 'bg-base text-muted'}`}>
-            {grant.workflowStatus}
-          </span>
-          <div className="text-xs text-muted mt-0.5 truncate max-w-[130px]">{grant.deadline}</div>
-        </div>
-      </td>
-      <td className="px-3 py-2.5 min-w-[80px]">
-        {grant.hireRecommendation?.needed
-          ? <span className="text-xs text-amber-600 font-medium">Suggested</span>
-          : <span className="text-xs text-muted">No</span>}
-      </td>
-      <td className="px-3 py-2.5 min-w-[160px]">
-        {grant.hireRecommendation?.email
-          ? <span className="text-xs font-mono text-clay truncate block max-w-[150px]">{grant.hireRecommendation.email}</span>
-          : <span className="text-xs text-muted">—</span>}
-      </td>
-    </tr>
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="6.5" cy="6.5" r="6.5" fill="oklch(0.97 0.04 85)"/>
+      <path d="M6.5 3.5v4M6.5 9v.5" stroke="oklch(0.45 0.10 70)" strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>
   )
 }
 
-function GrantCard({ grant, onClick }) {
-  const isIneligible = grant.status === 'ineligible'
+/* ── Workbook table ──────────────────────────────────────── */
+
+function WorkbookTable({ filtered, onSelect }) {
   return (
-    <div
-      onClick={onClick}
-      className={`bg-white border border-border rounded-xl p-5 cursor-pointer hover:border-clay/40 transition-all ${isIneligible ? 'opacity-40' : ''}`}
-    >
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex gap-1.5 flex-wrap">
-          <span className={`text-xs px-1.5 py-0.5 rounded border ${TYPE_COLORS[grant.type] || 'bg-base text-muted border-border'}`}>{grant.type}</span>
-          {isIneligible && <span className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-100">Not eligible</span>}
+    <div className="workbook-wrap">
+      <table className="workbook">
+        <thead>
+          <tr>
+            <th className="col-name">Grant name</th>
+            <th>Type</th>
+            <th className="col-value">Est. value</th>
+            <th className="col-use">Use for</th>
+            <th className="col-elig">Eligibility</th>
+            <th className="col-mono">Checklist</th>
+            <th className="col-mono">Steps</th>
+            <th className="col-mono">Email</th>
+            <th className="col-mono">Link</th>
+            <th className="col-contact">Contact</th>
+            <th className="col-mono">Deadline</th>
+            <th className="col-hire">Firm</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map(g => {
+            const isIneligible = g.status === 'ineligible'
+            return (
+              <tr
+                key={g.id}
+                onClick={() => onSelect(g)}
+                className={isIneligible ? 'row-ineligible' : ''}
+              >
+                <td className="col-name">
+                  <div className="gname">{g.name}</div>
+                  {g.description && (
+                    <div className="gdesc">{g.description}</div>
+                  )}
+                </td>
+                <td>
+                  <span className={typeBadge(g.type)}>{g.type}</span>
+                </td>
+                <td className="col-value">{isIneligible ? '—' : (g.estValue || '—')}</td>
+                <td className="col-use">{g.useFor}</td>
+                <td className="col-elig">
+                  <div className="pf">
+                    {(g.eligibilityChecks || []).slice(0, 5).map((c, i) => (
+                      <div key={i} className={`pf-row${c.pass === false ? ' fail' : ''}`}>
+                        <PfIcon pass={c.pass} />
+                        {c.label}
+                      </div>
+                    ))}
+                    {(g.eligibilityChecks || []).length > 5 && (
+                      <div className="pf-row" style={{ color: 'var(--ink-5)' }}>
+                        +{g.eligibilityChecks.length - 5} more
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="col-mono">
+                  {g.checklist?.length > 0
+                    ? `${g.checklist.filter(c => c.done).length}/${g.checklist.length}`
+                    : '—'}
+                </td>
+                <td className="col-mono">{g.steps?.length || '—'}</td>
+                <td className="col-mono">
+                  {g.draftEmail
+                    ? <span className="tbtn sent">{Icons.mail} Ready</span>
+                    : '—'}
+                </td>
+                <td className="col-mono">
+                  {g.link
+                    ? <a href={g.link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                        {Icons.link} ↗
+                      </a>
+                    : '—'}
+                </td>
+                <td className="col-contact">
+                  {g.contact
+                    ? <>
+                        <div className="who">{g.contact.name}</div>
+                        <div className="mail">{g.contact.email || g.contact.title}</div>
+                      </>
+                    : '—'}
+                </td>
+                <td className="col-mono">{g.deadline || '—'}</td>
+                <td className="col-hire">
+                  {g.hireRecommendation?.needed
+                    ? <>
+                        <div className="hfirm">{g.hireRecommendation.firm}</div>
+                        <div className="hwhy">{g.hireRecommendation.reason?.slice(0, 60)}</div>
+                      </>
+                    : '—'}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+
+      {filtered.length === 0 && (
+        <div style={{ padding: '56px 0', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
+          No grants match this filter.
         </div>
-        <span className={`text-xs px-2 py-0.5 rounded font-medium flex-shrink-0 ${STATUS_COLORS[grant.workflowStatus] || 'bg-base text-muted'}`}>
-          {grant.workflowStatus}
-        </span>
-      </div>
-      <h3 className="text-sm font-semibold text-ink leading-tight mb-1">{grant.name}</h3>
-      {isIneligible
-        ? <p className="text-xs text-red-500 leading-relaxed mt-2">{grant.ineligibleReason}</p>
-        : <>
-            <div className="font-mono text-base font-semibold text-clay mb-2">{grant.estValue}</div>
-            <p className="text-xs text-subtle leading-relaxed line-clamp-2">{grant.useFor}</p>
-            <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
-              <div className="flex gap-3">
-                {grant.draftEmail && <span className="text-xs text-clay font-medium">Email ready</span>}
-                {grant.hireRecommendation?.needed && <span className="text-xs text-amber-600">Firm suggested</span>}
-              </div>
-              <span className="text-xs text-muted font-mono">
-                {grant.checklist.filter(c => c.done).length}/{grant.checklist.length} tasks
-              </span>
-            </div>
-          </>
-      }
+      )}
     </div>
   )
 }
+
+/* ── Card grid ───────────────────────────────────────────── */
+
+function CardGrid({ filtered, onSelect }) {
+  return (
+    <div className="cards-wrap">
+      <div className="cards-grid">
+        {filtered.map(g => {
+          const isIneligible = g.status === 'ineligible'
+          return (
+            <div
+              key={g.id}
+              onClick={() => onSelect(g)}
+              className={`gcard${isIneligible ? ' ineligible' : ''}`}
+            >
+              <div className="gc-head">
+                <span className={typeBadge(g.type)}>{g.type}</span>
+                <div className="gc-name">{g.name}</div>
+              </div>
+              {g.description && <div className="gc-desc">{g.description}</div>}
+
+              {!isIneligible && (
+                <div className="gc-value">
+                  <span className="v">{g.estValue || '—'}</span>
+                  <span className="vlbl">estimated</span>
+                </div>
+              )}
+
+              {isIneligible && g.ineligibleReason && (
+                <div style={{ fontSize: 12, color: 'var(--st-bad)', lineHeight: 1.4 }}>
+                  {g.ineligibleReason}
+                </div>
+              )}
+
+              {(g.eligibilityChecks || []).length > 0 && (
+                <div className="gc-pf">
+                  {g.eligibilityChecks.slice(0, 4).map((c, i) => (
+                    <div key={i} className={`gc-pf-row${c.pass === false ? ' fail' : ''}`}>
+                      <PfIcon pass={c.pass} />
+                      {c.label}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="gc-foot">
+                {g.draftEmail && <span className="tbtn sent">{Icons.mail} Email ready</span>}
+                <span className="g-spacer" />
+                {g.deadline && (
+                  <span className="ddl">{Icons.clock} {g.deadline}</span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {filtered.length === 0 && (
+        <div style={{ padding: '56px 0', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
+          No grants match this filter.
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Main component ──────────────────────────────────────── */
 
 export default function GrantWorkbook({ property, grants: initialGrants, workbookId, demo, gmailConnected }) {
   const [grants, setGrants] = useState(initialGrants)
   const [view, setView] = useState('table')
   const [selectedGrant, setSelectedGrant] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [openFilter, setOpenFilter] = useState('all') // All / Open / Watch / Ineligible
   const [typeFilter, setTypeFilter] = useState('all')
+  const [search, setSearch] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
+
+  /* ── persistence ── */
 
   const persist = useCallback(async (grantId, patch) => {
     if (demo || !workbookId) return
@@ -166,10 +339,8 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
 
   const updateGrant = useCallback((grantId, changes) => {
     setGrants(prev => prev.map(g => g.id === grantId ? { ...g, ...changes } : g))
-    if (selectedGrant?.id === grantId) {
-      setSelectedGrant(prev => prev ? { ...prev, ...changes } : null)
-    }
-  }, [selectedGrant])
+    setSelectedGrant(prev => (prev?.id === grantId ? { ...prev, ...changes } : prev))
+  }, [])
 
   const handleStatusChange = useCallback((grantId, workflowStatus) => {
     updateGrant(grantId, { workflowStatus })
@@ -182,8 +353,6 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
   }, [updateGrant, persist])
 
   const handleReplyLogged = useCallback((data) => {
-    // Note: status update is handled by onStatusChange in the panel itself
-    // Here we just merge any new grants discovered from the reply
     if (data.newGrants?.length > 0) {
       setGrants(prev => {
         const existingIds = new Set(prev.map(g => g.id))
@@ -199,7 +368,7 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
         return toAdd.length > 0 ? [...prev, ...toAdd] : prev
       })
     }
-  }, [updateGrant])
+  }, [])
 
   const handleSyncInbox = useCallback(async () => {
     if (demo || syncing) return
@@ -212,11 +381,8 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
         setSyncResult({ error: data.error ?? `HTTP ${res.status}`, gmailRequired: data.gmailRequired })
       } else {
         setSyncResult({ updates: data.updates, scanned: data.scanned, message: data.message })
-        // Apply any status updates returned
         if (data.updates?.length > 0) {
-          data.updates.forEach(u => {
-            updateGrant(u.grantId, { workflowStatus: u.status })
-          })
+          data.updates.forEach(u => updateGrant(u.grantId, { workflowStatus: u.status }))
         }
       }
     } catch (err) {
@@ -232,181 +398,255 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
       const checklist = g.checklist.map((c, i) => i === itemIndex ? { ...c, done } : c)
       return { ...g, checklist }
     }))
-    if (selectedGrant?.id === grantId) {
-      setSelectedGrant(prev => prev ? {
-        ...prev,
-        checklist: prev.checklist.map((c, i) => i === itemIndex ? { ...c, done } : c)
-      } : null)
-    }
+    setSelectedGrant(prev => prev?.id === grantId ? {
+      ...prev,
+      checklist: prev.checklist.map((c, i) => i === itemIndex ? { ...c, done } : c),
+    } : prev)
     persist(grantId, { checklistIndex: itemIndex, done })
-  }, [selectedGrant, persist])
+  }, [persist])
+
+  /* ── stats ── */
+
+  const eligibleGrants  = grants.filter(g => g.status === 'eligible')
+  const totalValue      = eligibleGrants.reduce((sum, g) => sum + (g.estValueNum || 0), 0)
+  const sentCount       = grants.filter(g => ['Sent', 'Replied'].includes(g.workflowStatus)).length
+  const repliedCount    = grants.filter(g => g.workflowStatus === 'Replied').length
+  const pendingCount    = grants.filter(g => g.workflowStatus === 'Sent').length
+
+  /* ── filtering ── */
 
   const filtered = grants.filter(g => {
-    if (statusFilter === 'eligible' && g.status !== 'eligible') return false
-    if (statusFilter === 'ineligible' && g.status !== 'ineligible') return false
-    if (typeFilter !== 'all' && g.type !== typeFilter) return false
+    if (openFilter === 'open'       && g.status !== 'eligible') return false
+    if (openFilter === 'watch'      && g.workflowStatus !== 'Sent') return false
+    if (openFilter === 'ineligible' && g.status !== 'ineligible') return false
+    if (typeFilter === 'federal'    && g.type !== 'Federal') return false
+    if (typeFilter === 'state'      && g.type !== 'State') return false
+    if (typeFilter === 'local'      && g.type !== 'Local') return false
+    if (search && !g.name?.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 
-  const eligibleGrants = grants.filter(g => g.status === 'eligible')
-  const totalValue = eligibleGrants.reduce((sum, g) => sum + (g.estValueNum || 0), 0)
-  const sentCount = grants.filter(g => ['Sent', 'Replied'].includes(g.workflowStatus)).length
-  const repliedCount = grants.filter(g => g.workflowStatus === 'Replied').length
+  const openCount      = grants.filter(g => g.status === 'eligible').length
+  const watchCount     = grants.filter(g => g.workflowStatus === 'Sent').length
+  const ineligibleCount = grants.filter(g => g.status === 'ineligible').length
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col">
-      {/* Nav */}
-      <nav className="border-b border-border bg-white/80 backdrop-blur-sm px-6 py-3.5 flex items-center justify-between sticky top-0 z-30">
-        <Link href={demo ? '/' : '/dashboard'} className="font-mono text-sm font-medium text-ink">
-          Grant<span className="text-clay">IQ</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          {demo && (
-            <>
-              <span className="text-xs font-mono px-2 py-0.5 bg-clay-light/60 border border-clay/30 text-clay-dark rounded font-medium">DEMO</span>
-              <Link href="/sign-up" className="text-xs px-3 py-1.5 bg-clay text-white rounded-lg hover:bg-clay-dark transition-colors font-medium">
-                Save this workbook →
-              </Link>
-            </>
+    <div className="giq-app">
+      {/* ── Topbar ── */}
+      <header className="giq-topbar">
+        <a href={demo ? '/' : '/dashboard'} className="brand">
+          <div className="brand-mark">iQ</div>
+          GrantIQ
+        </a>
+        <div className="crumbs">
+          <span>Workspace</span>
+          <span className="sep">/</span>
+          <strong>{property.address}</strong>
+        </div>
+        <div className="t-spacer" />
+        <div className="t-actions">
+          {!demo && (
+            <button
+              onClick={handleSyncInbox}
+              disabled={syncing}
+              className="btn btn-sm"
+              title={gmailConnected ? 'Scan inbox for grant replies' : 'Connect Gmail to enable inbox sync'}
+            >
+              {Icons.sync}
+              {syncing ? 'Syncing…' : 'Sync inbox'}
+            </button>
+          )}
+          {!demo && (
+            <a href="/sign-out" className="btn btn-sm btn-ghost">Sign out</a>
           )}
         </div>
-      </nav>
+      </header>
 
-      {/* Property header */}
-      <div className="border-b border-border bg-white px-6 py-5">
-        <div className="max-w-screen-xl mx-auto flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold text-ink tracking-tight">{property.address}</h1>
-            <p className="text-sm text-muted mt-0.5">{property.city} · {property.propertyType}</p>
+      <div className="giq-main">
+        {/* ── Sidebar ── */}
+        <aside className="giq-sidebar">
+          <div className="prop-card">
+            <div className="pc-head">
+              {Icons.building}
+              {property.address}
+            </div>
+            <div className="pc-addr">{property.city}</div>
           </div>
-          <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
-            {[
-              { value: eligibleGrants.length, label: 'eligible grants' },
-              { value: `${formatValue(totalValue)}+`, label: 'total value', clay: true },
-              { value: sentCount, label: 'sent' },
-              { value: repliedCount, label: 'replies' },
-            ].map(s => (
-              <div key={s.label} className="text-right">
-                <div className={`font-mono text-xl font-semibold ${s.clay ? 'text-clay' : 'text-ink'}`}>{s.value}</div>
-                <div className="text-xs text-muted">{s.label}</div>
+
+          <div className="s-label">Workbook</div>
+
+          <button
+            className="s-nav active"
+            onClick={() => {}}
+          >
+            <span className="s-ico">{Icons.table}</span>
+            Grant workbook
+            <span className="s-count">{eligibleGrants.length}</span>
+          </button>
+
+          <button className="s-nav" onClick={() => {}}>
+            <span className="s-ico">{Icons.inbox}</span>
+            Inbox sync
+          </button>
+
+          <button className="s-nav" onClick={() => {}}>
+            <span className="s-ico">{Icons.people}</span>
+            Consultants
+          </button>
+
+          <div className="s-label">Account</div>
+
+          <button className="s-nav" onClick={() => {}}>
+            <span className="s-ico">{Icons.settings}</span>
+            Settings
+          </button>
+
+          <div className="s-spacer" />
+
+          {!gmailConnected && !demo && (
+            <div className="inbox-card">
+              <div className="ic-title">Connect Gmail</div>
+              <div className="ic-sub">
+                Automatically detect grant replies and track application status.
               </div>
-            ))}
-            {!demo && (
-              <button
-                onClick={handleSyncInbox}
-                disabled={syncing}
-                title={gmailConnected ? 'Scan your inbox for grant replies' : 'Sign in with Google to enable inbox sync'}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                  gmailConnected
-                    ? 'border-clay/40 text-clay hover:bg-clay-light/40'
-                    : 'border-border text-muted cursor-not-allowed'
-                } ${syncing ? 'opacity-60' : ''}`}
-              >
-                {syncing ? (
-                  <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                  </svg>
-                ) : (
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                    <path d="M1 6a5 5 0 009.9-1M11 6a5 5 0 00-9.9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    <path d="M9 2l1.9 3M3 10L1.1 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
+              <a href="/connect/gmail" className="btn btn-sm btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
+                Connect Gmail
+              </a>
+            </div>
+          )}
+        </aside>
+
+        {/* ── Content ── */}
+        <div className="giq-content">
+          {/* Sync banner */}
+          {syncResult && (
+            <div className={`sync-banner${syncResult.error ? ' err' : ' ok'}`}>
+              <span>
+                {syncResult.error
+                  ? syncResult.gmailRequired
+                    ? 'Gmail not connected — sign in with Google to enable inbox sync.'
+                    : `Sync failed: ${syncResult.error}`
+                  : syncResult.message
+                    ? syncResult.message
+                    : `Scanned ${syncResult.scanned} thread${syncResult.scanned !== 1 ? 's' : ''} — ${syncResult.updates?.length ?? 0} grant${syncResult.updates?.length !== 1 ? 's' : ''} updated.`
+                }
+              </span>
+              <button onClick={() => setSyncResult(null)} className="btn btn-sm btn-ghost">✕</button>
+            </div>
+          )}
+
+          {/* Page header */}
+          <div className="page-header">
+            <div className="ph-title">
+              <div className="ph-prop">Property workbook · v1</div>
+              <h1 className="ph-h1">
+                {property.address}
+                {pendingCount > 0 && (
+                  <span className="badge b-watch">
+                    <span className="dot" />
+                    {pendingCount} replies pending
+                  </span>
                 )}
-                {syncing ? 'Syncing…' : 'Sync inbox'}
-              </button>
-            )}
+              </h1>
+              <div className="ph-meta">
+                {Icons.pin}
+                {property.address}
+                {property.propertyType && <> · {property.propertyType}</>}
+                {property.nrStatus && <> · {property.nrStatus}</>}
+              </div>
+            </div>
+            <div className="summary-bar">
+              <div className="s-cell">
+                <span className="s-lbl">Eligible</span>
+                <span className="s-num">{eligibleGrants.length}</span>
+                <span className="s-delta">grants</span>
+              </div>
+              <div className="s-cell">
+                <span className="s-lbl">Est. value</span>
+                <span className="s-num">{formatValue(totalValue)}</span>
+                <span className="s-delta up">+</span>
+              </div>
+              <div className="s-cell">
+                <span className="s-lbl">Sent</span>
+                <span className="s-num">{sentCount}</span>
+                <span className="s-delta">emails</span>
+              </div>
+              <div className="s-cell">
+                <span className="s-lbl">Replies</span>
+                <span className="s-num">{repliedCount}</span>
+                <span className="s-delta">received</span>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Sync result banner */}
-      {syncResult && (
-        <div className={`px-6 py-2.5 text-xs flex items-center justify-between gap-3 ${
-          syncResult.error ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-800'
-        }`}>
-          <span>
-            {syncResult.error
-              ? syncResult.gmailRequired
-                ? 'Gmail not connected — sign in with Google to enable inbox sync.'
-                : `Sync failed: ${syncResult.error}`
-              : syncResult.message
-                ? syncResult.message
-                : `Scanned ${syncResult.scanned} thread${syncResult.scanned !== 1 ? 's' : ''} — ${syncResult.updates?.length ?? 0} grant${syncResult.updates?.length !== 1 ? 's' : ''} updated.`
-            }
-          </span>
-          <button onClick={() => setSyncResult(null)} className="text-current opacity-60 hover:opacity-100">✕</button>
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="border-b border-border bg-surface/95 backdrop-blur-sm px-6 py-3 sticky top-[57px] z-20">
-        <div className="max-w-screen-xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex border border-border rounded-lg overflow-hidden bg-white">
-              {['all', 'eligible', 'ineligible'].map(f => (
-                <button key={f} onClick={() => setStatusFilter(f)}
-                  className={`px-3 py-1.5 text-xs capitalize transition-colors ${statusFilter === f ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}>
-                  {f}
+          {/* Toolbar */}
+          <div className="giq-toolbar">
+            {/* Status seg */}
+            <div className="seg">
+              {[
+                { val: 'all',        label: 'All',        cnt: grants.length },
+                { val: 'open',       label: 'Open',       cnt: openCount },
+                { val: 'watch',      label: 'Watch',      cnt: watchCount },
+                { val: 'ineligible', label: 'Ineligible', cnt: ineligibleCount },
+              ].map(({ val, label, cnt }) => (
+                <button key={val} className={openFilter === val ? 'on' : ''} onClick={() => setOpenFilter(val)}>
+                  {label}
+                  <span className="cnt">{cnt}</span>
                 </button>
               ))}
             </div>
-            <div className="flex border border-border rounded-lg overflow-hidden bg-white">
-              {['all', 'Federal', 'State', 'Local'].map(f => (
-                <button key={f} onClick={() => setTypeFilter(f)}
-                  className={`px-3 py-1.5 text-xs transition-colors ${typeFilter === f ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}>
-                  {f}
+
+            {/* Type seg */}
+            <div className="seg">
+              {[
+                { val: 'all',     label: 'All' },
+                { val: 'federal', label: 'Federal' },
+                { val: 'state',   label: 'State' },
+                { val: 'local',   label: 'Local' },
+              ].map(({ val, label }) => (
+                <button key={val} className={typeFilter === val ? 'on' : ''} onClick={() => setTypeFilter(val)}>
+                  {label}
                 </button>
               ))}
             </div>
-          </div>
-          <div className="flex border border-border rounded-lg overflow-hidden bg-white">
-            {[
-              { val: 'table', icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="2" rx="0.5" fill="currentColor"/><rect x="1" y="5" width="10" height="2" rx="0.5" fill="currentColor"/><rect x="1" y="9" width="10" height="2" rx="0.5" fill="currentColor"/></svg>, label: 'Table' },
-              { val: 'cards', icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="4" height="4" rx="0.5" fill="currentColor"/><rect x="7" y="1" width="4" height="4" rx="0.5" fill="currentColor"/><rect x="1" y="7" width="4" height="4" rx="0.5" fill="currentColor"/><rect x="7" y="7" width="4" height="4" rx="0.5" fill="currentColor"/></svg>, label: 'Cards' },
-            ].map(({ val, icon, label }) => (
-              <button key={val} onClick={() => setView(val)}
-                className={`px-3 py-1.5 text-xs flex items-center gap-1.5 transition-colors ${view === val ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}>
-                {icon}{label}
+
+            {/* Search */}
+            <div className="toolbar-search">
+              {Icons.search}
+              <input
+                type="text"
+                placeholder="Search grants…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="toolbar-grow" />
+
+            {/* View seg */}
+            <div className="seg">
+              <button className={view === 'table' ? 'on' : ''} onClick={() => setView('table')}>
+                {Icons.tableSmall} Workbook
               </button>
-            ))}
+              <button className={view === 'cards' ? 'on' : ''} onClick={() => setView('cards')}>
+                {Icons.cards} Cards
+              </button>
+            </div>
+
+            <button className="btn btn-sm">
+              Export .xlsx
+            </button>
           </div>
+
+          {/* Main view */}
+          {view === 'table'
+            ? <WorkbookTable filtered={filtered} onSelect={setSelectedGrant} />
+            : <CardGrid filtered={filtered} onSelect={setSelectedGrant} />
+          }
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 max-w-screen-xl mx-auto w-full px-4 sm:px-6 py-6">
-        {view === 'table' ? (
-          <div className="overflow-x-auto rounded-xl border border-border bg-white">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-border bg-base">
-                  {['Grant name','Type','Est. value','Use for','Eligibility','Checklist','Steps','Email','Link','Contact','Status / Deadline','Hire?','Firm email'].map((col, i) => (
-                    <th key={i} className="px-3 py-2.5 text-xs font-medium text-muted uppercase tracking-wider whitespace-nowrap">{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(g => <TableRow key={g.id} grant={g} onClick={() => setSelectedGrant(g)} />)}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map(g => <GrantCard key={g.id} grant={g} onClick={() => setSelectedGrant(g)} />)}
-          </div>
-        )}
-
-        {filtered.length === 0 && (
-          <div className="py-16 text-center"><p className="text-sm text-muted">No grants match this filter.</p></div>
-        )}
-
-        <div className="mt-6 flex items-center gap-2 text-xs text-muted">
-          <div className="w-3 h-px bg-border" />
-          <span>Faded rows are ineligible — reasons shown inline and in the detail panel.</span>
-        </div>
-      </div>
-
+      {/* Detail panel */}
       {selectedGrant && (
         <GrantDetailPanel
           grant={selectedGrant}

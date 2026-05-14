@@ -4,19 +4,35 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 const STEPS = [
-  'Geocoding your address…',
-  'Checking historic district boundaries…',
-  'Looking up National Register eligibility…',
-  'Searching federal Historic Tax Credit programs…',
-  'Scanning California state incentive programs…',
-  'Checking city and county grant boundaries…',
-  'Matching SF / local small business grants…',
-  'Researching SBA and CDFI financing programs…',
-  'Evaluating ADA and regulatory cost savings…',
-  'Identifying consultant firms in your area…',
-  'Drafting outreach emails…',
-  'Building your grant workbook…',
+  { label: 'Geocoding your address…',                      meta: 'geo.parcel.api' },
+  { label: 'Checking historic district boundaries…',       meta: 'nps.gov/nr' },
+  { label: 'Looking up National Register eligibility…',    meta: 'nps.gov/htc' },
+  { label: 'Searching federal Historic Tax Credit programs…', meta: 'nps.gov/htc' },
+  { label: 'Scanning California state incentive programs…', meta: 'ohp.parks.ca.gov' },
+  { label: 'Checking city and county grant boundaries…',   meta: 'ci.richmond.ca.us' },
+  { label: 'Matching SF / local small business grants…',   meta: 'oewd.org' },
+  { label: 'Researching SBA and CDFI financing programs…', meta: 'sba.gov' },
+  { label: 'Evaluating ADA and regulatory cost savings…',  meta: 'ada.gov' },
+  { label: 'Identifying consultant firms in your area…',   meta: 'directory.match()' },
+  { label: 'Drafting outreach emails…',                    meta: 'compose.draft' },
+  { label: 'Building your grant workbook…',                meta: 'workbook.build' },
 ]
+
+function CheckSVG() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M2.5 7l3 3 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
+function SparkleSVG() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M6.5 1v2M6.5 10v2M1 6.5h2M10 6.5h2M2.93 2.93l1.41 1.41M8.66 8.66l1.41 1.41M2.93 10.07l1.41-1.41M8.66 4.34l1.41-1.41" stroke="var(--ink-4)" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  )
+}
 
 export default function ResearchingLoader({ propertyId, address }) {
   const router = useRouter()
@@ -28,12 +44,10 @@ export default function ResearchingLoader({ propertyId, address }) {
     if (started) return
     setStarted(true)
 
-    // Cycle through steps every ~2.5s for visual effect
     const interval = setInterval(() => {
       setStepIndex(i => Math.min(i + 1, STEPS.length - 1))
     }, 2500)
 
-    // Kick off research
     fetch(`/api/grants/research/${propertyId}`, { method: 'POST' })
       .then(res => {
         if (!res.ok) return res.json().then(d => { throw new Error(d.error ?? `HTTP ${res.status}`) })
@@ -55,14 +69,16 @@ export default function ResearchingLoader({ propertyId, address }) {
     return () => clearInterval(interval)
   }, [propertyId, router, started])
 
+  const pct = Math.round(((stepIndex + 1) / STEPS.length) * 100)
+
   if (error) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
-        <div className="text-center max-w-sm">
-          <p className="text-sm text-red-600 mb-4">{error}</p>
+      <div className="loading-shell">
+        <div className="loading-card" style={{ textAlign: 'center' }}>
+          <p style={{ color: 'var(--st-bad)', fontSize: '13px', marginBottom: '16px' }}>{error}</p>
           <button
             onClick={() => { setError(null); setStarted(false) }}
-            className="px-4 py-2 text-sm bg-clay text-white rounded-lg"
+            className="btn btn-primary"
           >
             Try again
           </button>
@@ -72,51 +88,67 @@ export default function ResearchingLoader({ propertyId, address }) {
   }
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center">
-      <div className="max-w-md w-full px-8">
-        {/* Header */}
-        <div className="mb-10">
-          <div className="font-mono text-sm text-clay mb-2">GrantIQ</div>
-          <h1 className="text-xl font-semibold text-ink mb-1">Researching your property</h1>
-          <p className="text-sm text-subtle">{address}</p>
-        </div>
-
-        {/* Steps */}
-        <div className="space-y-3 mb-10">
-          {STEPS.map((step, i) => {
-            const done = i < stepIndex
-            const active = i === stepIndex
-            const pending = i > stepIndex
-            return (
-              <div key={step} className={`flex items-center gap-3 transition-opacity duration-300 ${pending ? 'opacity-30' : 'opacity-100'}`}>
-                <div className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center transition-all ${
-                  done ? 'bg-clay' : active ? 'border-2 border-clay' : 'border-2 border-border'
-                }`}>
-                  {done && (
-                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 10">
-                      <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                  {active && <div className="w-1.5 h-1.5 rounded-full bg-clay animate-pulse" />}
-                </div>
-                <span className={`text-sm ${active ? 'text-ink font-medium' : done ? 'text-subtle' : 'text-muted'}`}>
-                  {step}
-                </span>
-              </div>
-            )
-          })}
+    <div className="loading-shell">
+      <div className="loading-card">
+        {/* Card header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{
+            width: 22, height: 22, borderRadius: 8,
+            background: 'var(--ink)', color: '#fff',
+            display: 'grid', placeItems: 'center',
+            fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '-0.04em',
+            flexShrink: 0,
+          }}>
+            iQ
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 500, fontSize: 13.5, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {address || 'Your property'}
+            </div>
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-4)', flexShrink: 0 }}>
+            {pct}%
+          </div>
         </div>
 
         {/* Progress bar */}
-        <div className="h-1 bg-border rounded-full overflow-hidden">
+        <div style={{ height: 2, background: 'var(--bg-sunk)', borderRadius: 1, marginBottom: 22, overflow: 'hidden' }}>
           <div
-            className="h-full bg-clay rounded-full transition-all duration-700 ease-out"
-            style={{ width: `${Math.round(((stepIndex + 1) / STEPS.length) * 100)}%` }}
+            style={{
+              height: '100%', background: 'var(--ink)', borderRadius: 1,
+              width: `${pct}%`, transition: 'width 0.7s ease-out',
+            }}
           />
         </div>
-        <p className="text-xs text-muted mt-2 text-right">
-          {Math.round(((stepIndex + 1) / STEPS.length) * 100)}% complete
-        </p>
+
+        {/* Steps */}
+        {STEPS.map((step, i) => {
+          const done = i < stepIndex
+          const run = i === stepIndex
+          const cls = `lstep${run ? ' run' : done ? ' done' : ''}`
+          return (
+            <div key={step.label} className={cls}>
+              <div className="ls-ico">
+                {done
+                  ? <CheckSVG />
+                  : <div className="ls-ring" />
+                }
+              </div>
+              <span style={{ flex: 1 }}>{step.label}</span>
+              <span className="ls-meta">{step.meta}</span>
+            </div>
+          )
+        })}
+
+        {/* Footer */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border-2)',
+          color: 'var(--ink-4)', fontSize: 12,
+        }}>
+          <SparkleSVG />
+          You don't have to wait — we'll email when it's ready.
+        </div>
       </div>
     </div>
   )

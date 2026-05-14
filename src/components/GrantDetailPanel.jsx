@@ -1,45 +1,88 @@
 'use client'
 
-import { useState } from 'react'
-
-const TYPE_COLORS = {
-  Federal: 'bg-blue-50 text-blue-700 border-blue-100',
-  State: 'bg-purple-50 text-purple-700 border-purple-100',
-  Local: 'bg-amber-50 text-amber-700 border-amber-100',
-}
+import { useState, useEffect } from 'react'
 
 const WORKFLOW_STATUSES = ['Not started', 'Draft email ready', 'Contact made', 'Sent', 'Replied']
 
+/* ── mini icons ──────────────────────────────────────────── */
+
 function CheckIcon({ pass }) {
   if (pass === true) return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
-      <circle cx="7" cy="7" r="7" fill="#22c55e" fillOpacity="0.12"/>
-      <path d="M4 7l2 2 4-4" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="7" cy="7" r="7" fill="oklch(0.96 0.03 150)"/>
+      <path d="M4 7l2 2 4-4" stroke="oklch(0.42 0.09 150)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
   if (pass === false) return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
-      <circle cx="7" cy="7" r="7" fill="#ef4444" fillOpacity="0.1"/>
-      <path d="M4.5 4.5l5 5M9.5 4.5l-5 5" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round"/>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="7" cy="7" r="7" fill="oklch(0.97 0.025 25)"/>
+      <path d="M4.5 4.5l5 5M9.5 4.5l-5 5" stroke="oklch(0.58 0.16 25)" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   )
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
-      <circle cx="7" cy="7" r="7" fill="#f59e0b" fillOpacity="0.12"/>
-      <path d="M7 4v3.5M7 9.5v.5" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round"/>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="7" cy="7" r="7" fill="oklch(0.97 0.04 85)"/>
+      <path d="M7 4v3.5M7 9.5v.5" stroke="oklch(0.45 0.10 70)" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   )
 }
 
-export default function GrantDetailPanel({ grant, demo, propertyId, onClose, onStatusChange, onEmailSave, onChecklistToggle, onReplyLogged }) {
-  const [emailMode, setEmailMode] = useState('view')
-  const [emailBody, setEmailBody] = useState(grant.emailBody || grant.draftEmail?.body || '')
-  const [activeTab, setActiveTab] = useState('overview')
-  const [saving, setSaving] = useState(false)
-  const [replyMode, setReplyMode] = useState(false)
-  const [replyText, setReplyText] = useState('')
+function DpCheckbox({ checked }) {
+  return (
+    <div className="dp-cbox">
+      {checked && (
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M2 5l2.5 2.5 3.5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      )}
+    </div>
+  )
+}
+
+function XIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M3 3l9 9M12 3l-9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+/* ── type / status helpers ───────────────────────────────── */
+
+function typeBadgeClass(type) {
+  if (type === 'Federal') return 'badge-sq federal'
+  if (type === 'State')   return 'badge-sq state'
+  return 'badge-sq city'
+}
+
+function statusBadgeClass(status) {
+  if (!status || status === 'Not started') return 'badge b-mute'
+  if (status === 'Sent')   return 'badge b-info'
+  if (status === 'Replied') return 'badge b-done'
+  if (status === 'Contact made') return 'badge b-open'
+  return 'badge'
+}
+
+/* ── main component ──────────────────────────────────────── */
+
+export default function GrantDetailPanel({
+  grant, demo, propertyId,
+  onClose, onStatusChange, onEmailSave, onChecklistToggle, onReplyLogged,
+}) {
+  const [emailMode, setEmailMode]     = useState('view')
+  const [emailBody, setEmailBody]     = useState(grant.emailBody || grant.draftEmail?.body || '')
+  const [saving, setSaving]           = useState(false)
+  const [replyMode, setReplyMode]     = useState(false)
+  const [replyText, setReplyText]     = useState('')
   const [replyLoading, setReplyLoading] = useState(false)
   const [replyResult, setReplyResult] = useState(null)
+
+  // Esc to close
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [onClose])
 
   const handleLogReply = async () => {
     if (!replyText.trim()) return
@@ -64,16 +107,6 @@ export default function GrantDetailPanel({ grant, demo, propertyId, onClose, onS
     }
   }
 
-  const checkedCount = grant.checklist.filter(c => c.done).length
-
-  const handleCheckbox = (i, done) => {
-    onChecklistToggle(grant.id, i, done)
-  }
-
-  const handleStatusSelect = (status) => {
-    onStatusChange(grant.id, status)
-  }
-
   const handleEmailSave = async () => {
     setSaving(true)
     await onEmailSave(grant.id, emailBody)
@@ -83,333 +116,351 @@ export default function GrantDetailPanel({ grant, demo, propertyId, onClose, onS
 
   const handleCopy = () => navigator.clipboard.writeText(emailBody)
 
+  const isIneligible  = grant.status === 'ineligible'
+  const checkedCount  = (grant.checklist || []).filter(c => c.done).length
+  const history       = grant.statusHistory || []
+
+  // Initials for firm avatar
+  const firmInitial = grant.hireRecommendation?.firm?.charAt(0) ?? '?'
+
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
-      <div
-        className="relative w-full max-w-xl bg-white border-l border-border h-full overflow-y-auto slide-in-right flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-border px-6 py-4 z-10">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`text-xs px-2 py-0.5 rounded border font-medium ${TYPE_COLORS[grant.type] || 'bg-base text-subtle border-border'}`}>
-                  {grant.type}
-                </span>
-                <span className={`text-xs px-2 py-0.5 rounded font-medium ${grant.status === 'eligible' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                  {grant.status === 'eligible' ? 'Eligible' : 'Not eligible'}
-                </span>
-              </div>
-              <h2 className="text-base font-semibold text-ink leading-tight">{grant.name}</h2>
-              <div className="text-lg font-mono font-semibold text-clay mt-1">{grant.estValue}</div>
-            </div>
-            <button onClick={onClose} className="text-muted hover:text-ink transition-colors p-1 mt-1">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-          </div>
+    <>
+      {/* scrim */}
+      <div className="detail-scrim" onClick={onClose} />
 
-          {/* Status selector (non-demo, eligible only) */}
-          {!demo && grant.status === 'eligible' && (
-            <div className="mt-3 flex gap-1 flex-wrap">
-              {WORKFLOW_STATUSES.map(s => (
-                <button
-                  key={s}
-                  onClick={() => handleStatusSelect(s)}
-                  className={`text-xs px-2 py-1 rounded transition-colors ${
-                    grant.workflowStatus === s
-                      ? 'bg-ink text-white font-medium'
-                      : 'bg-base text-muted hover:text-ink border border-border'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
+      {/* panel */}
+      <div className="detail-panel">
+        {/* ── dp-top ── */}
+        <div className="dp-top">
+          <div className="dp-info">
+            <div className="dp-name">{grant.name}</div>
+            <div className="dp-meta">
+              <span className={typeBadgeClass(grant.type)}>{grant.type}</span>
+              <span className={`badge${isIneligible ? ' b-bad' : ' b-open'}`}>
+                <span className="dot" />
+                {isIneligible ? 'Not eligible' : 'Eligible'}
+              </span>
+              {grant.deadline && (
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-4)' }}>
+                  Due {grant.deadline}
+                </span>
+              )}
             </div>
-          )}
-
-          {/* Tabs */}
-          <div className="flex gap-1 mt-3">
-            {['overview', 'email', 'history'].map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1.5 text-xs rounded-md capitalize transition-colors ${activeTab === tab ? 'bg-base text-ink font-medium' : 'text-muted hover:text-subtle'}`}>
-                {tab}
-              </button>
-            ))}
           </div>
+          <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <XIcon />
+          </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 px-6 py-5 space-y-6">
-          {activeTab === 'overview' && (
-            <>
-              {grant.status === 'ineligible' && grant.ineligibleReason && (
-                <div className="bg-red-50 border border-red-100 rounded-lg p-4">
-                  <p className="text-xs font-medium text-red-700 mb-1">Why this grant doesn't apply</p>
-                  <p className="text-sm text-red-600 leading-relaxed">{grant.ineligibleReason}</p>
-                </div>
-              )}
+        {/* ── dp-body ── */}
+        <div className="dp-body">
 
-              <div>
-                <h3 className="text-xs font-medium text-subtle uppercase tracking-wider mb-2">What it covers</h3>
-                <p className="text-sm text-ink leading-relaxed">{grant.useFor}</p>
+          {/* Estimated value */}
+          <div className="dp-section">
+            <h4>Estimated value</h4>
+            <div className="dp-big-val">{grant.estValue || '—'}</div>
+            {grant.valueNote && <div className="dp-big-sub">{grant.valueNote}</div>}
+          </div>
+
+          {/* Why ineligible */}
+          {isIneligible && grant.ineligibleReason && (
+            <div className="dp-section">
+              <h4>Why this grant didn't qualify</h4>
+              <div style={{
+                background: 'var(--st-bad-soft)', border: '1px solid var(--st-bad-border)',
+                borderRadius: 'var(--radius)', padding: '12px 14px',
+                color: 'var(--st-bad)', fontSize: 13, lineHeight: 1.5,
+              }}>
+                {grant.ineligibleReason}
               </div>
-
-              {grant.eligibilityChecks.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-medium text-subtle uppercase tracking-wider mb-3">Eligibility checks</h3>
-                  <div className="space-y-2">
-                    {grant.eligibilityChecks.map((check, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <CheckIcon pass={check.pass} />
-                        <span className="text-sm text-ink">{check.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {grant.checklist.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-medium text-subtle uppercase tracking-wider">Pre-application checklist</h3>
-                    <span className="text-xs font-mono text-clay">{checkedCount}/{grant.checklist.length}</span>
-                  </div>
-                  <div className="space-y-2">
-                    {grant.checklist.map((item, i) => (
-                      <label key={i} className="flex items-start gap-3 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={item.done}
-                          onChange={e => handleCheckbox(i, e.target.checked)}
-                          className="mt-0.5"
-                        />
-                        <span className={`text-sm leading-5 transition-colors ${item.done ? 'line-through text-muted' : 'text-ink'}`}>
-                          {item.label}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {grant.steps.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-medium text-subtle uppercase tracking-wider mb-3">How to apply</h3>
-                  <div className="space-y-3">
-                    {grant.steps.map((step, i) => (
-                      <div key={i} className="flex gap-3">
-                        <span className="font-mono text-xs text-clay font-medium flex-shrink-0 mt-0.5">{i + 1}</span>
-                        <p className="text-sm text-ink leading-relaxed">{step}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {grant.contact && (
-                <div>
-                  <h3 className="text-xs font-medium text-subtle uppercase tracking-wider mb-3">Key contact</h3>
-                  <div className="bg-base rounded-lg p-4 border border-border">
-                    <div className="font-medium text-sm text-ink">{grant.contact.name}</div>
-                    <div className="text-xs text-muted mt-0.5">{grant.contact.title}</div>
-                    <div className="mt-2 space-y-1">
-                      {grant.contact.email && <div className="text-xs font-mono text-clay">{grant.contact.email}</div>}
-                      {grant.contact.phone && <div className="text-xs text-muted">{grant.contact.phone}</div>}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {grant.hireRecommendation?.needed && (
-                <div>
-                  <h3 className="text-xs font-medium text-subtle uppercase tracking-wider mb-3">Recommended firm</h3>
-                  <div className="border border-clay-light rounded-lg p-4 bg-amber-50/30">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-clay-light flex items-center justify-center flex-shrink-0">
-                        <span className="text-xs font-mono text-clay font-medium">{grant.hireRecommendation.firm?.charAt(0)}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-ink">{grant.hireRecommendation.firm}</div>
-                        <div className="text-xs text-muted mt-0.5">{grant.hireRecommendation.contact}</div>
-                        <p className="text-xs text-subtle mt-2 leading-relaxed">{grant.hireRecommendation.reason}</p>
-                        {grant.hireRecommendation.email && (
-                          <button onClick={() => setActiveTab('email')} className="mt-3 text-xs text-clay hover:text-clay-dark font-medium transition-colors">
-                            Send warm intro → {grant.hireRecommendation.email}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
+              <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>
+                Re-screen automatically if your project scope or property status changes.
+              </div>
+            </div>
           )}
 
-          {activeTab === 'email' && (
-            <div className="space-y-4">
-              {grant.draftEmail ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-medium text-subtle uppercase tracking-wider">Pre-drafted outreach</h3>
-                    <div className="flex gap-2">
-                      {emailMode === 'view'
-                        ? <button onClick={() => setEmailMode('edit')} className="text-xs text-clay hover:text-clay-dark font-medium">Edit</button>
-                        : <>
-                            <button onClick={handleEmailSave} className="text-xs text-clay hover:text-clay-dark font-medium">
-                              {saving ? 'Saving…' : 'Save'}
-                            </button>
-                            <button onClick={() => setEmailMode('view')} className="text-xs text-muted hover:text-ink">Cancel</button>
-                          </>
-                      }
-                      <button onClick={handleCopy} className="text-xs text-muted hover:text-ink">Copy</button>
-                    </div>
-                  </div>
+          {/* Use this grant for */}
+          {!isIneligible && grant.useFor && (
+            <div className="dp-section">
+              <h4>Use this grant for</h4>
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: 'var(--ink-2)' }}>{grant.useFor}</p>
+            </div>
+          )}
 
-                  <div className="border border-border rounded-lg overflow-hidden">
-                    <div className="border-b border-border px-4 py-3 bg-base space-y-1">
-                      <div className="flex gap-2 text-xs">
-                        <span className="text-muted w-8 flex-shrink-0">To</span>
-                        <span className="text-ink font-mono">{grant.draftEmail.to}</span>
-                      </div>
-                      <div className="flex gap-2 text-xs">
-                        <span className="text-muted w-8 flex-shrink-0">Subj</span>
-                        <span className="text-ink">{grant.draftEmail.subject}</span>
-                      </div>
-                    </div>
-                    <div className="p-4">
-                      {emailMode === 'view'
-                        ? <pre className="text-sm text-ink whitespace-pre-wrap font-sans leading-relaxed">{emailBody}</pre>
-                        : <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)} rows={16}
-                            className="w-full text-sm text-ink leading-relaxed resize-none focus:outline-none font-sans" />
-                      }
-                    </div>
-                    <div className="border-t border-border px-4 py-3 bg-base flex gap-2">
-                      {!demo && (
-                        <button
-                          onClick={() => { onStatusChange(grant.id, 'Sent'); onClose() }}
-                          className="px-4 py-1.5 bg-clay text-white text-xs rounded font-medium hover:bg-clay-dark transition-colors"
-                        >
-                          Mark as sent
-                        </button>
-                      )}
-                      <button onClick={handleCopy} className="px-4 py-1.5 border border-border text-ink text-xs rounded hover:bg-white transition-colors">
-                        Copy to clipboard
-                      </button>
-                    </div>
+          {/* Eligibility */}
+          {(grant.eligibilityChecks || []).length > 0 && (
+            <div className="dp-section">
+              <h4>Eligibility</h4>
+              <div className="dp-checklist">
+                {grant.eligibilityChecks.map((c, i) => (
+                  <div key={i} className="dp-ci" style={{ cursor: 'default' }}>
+                    <CheckIcon pass={c.pass} />
+                    <span style={{ flex: 1, color: c.pass === false ? 'var(--st-bad)' : 'var(--ink-2)' }}>
+                      {c.label}
+                    </span>
                   </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-                  {demo && (
-                    <div className="bg-clay-light/30 rounded-lg p-3 text-xs text-subtle">
-                      <span className="font-medium text-ink">Demo mode: </span>
-                      Email edits are not saved. <a href="/sign-up" className="text-clay hover:underline">Create an account</a> to save your workbook.
-                    </div>
+          {/* Pre-app checklist */}
+          {(grant.checklist || []).length > 0 && (
+            <div className="dp-section">
+              <h4>
+                Pre-application checklist
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)', marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
+                  {checkedCount}/{grant.checklist.length}
+                </span>
+              </h4>
+              <div className="dp-checklist">
+                {grant.checklist.map((item, i) => (
+                  <div
+                    key={i}
+                    className={`dp-ci${item.done ? ' done' : ''}`}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => onChecklistToggle(grant.id, i, !item.done)}
+                  >
+                    <DpCheckbox checked={item.done} />
+                    <span style={{ flex: 1 }}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Application steps */}
+          {(grant.steps || []).length > 0 && !isIneligible && (
+            <div className="dp-section">
+              <h4>Application steps</h4>
+              <div className="dp-steps">
+                {grant.steps.map((step, i) => (
+                  <div key={i} className="dp-step">{step}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pre-drafted email */}
+          {grant.draftEmail && !isIneligible && (
+            <div className="dp-section">
+              <h4>Pre-drafted email</h4>
+              <div className="email-card">
+                <div className="email-row">
+                  <span className="ek">To</span>
+                  <span className="ev" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{grant.draftEmail.to}</span>
+                </div>
+                <div className="email-row">
+                  <span className="ek">Subject</span>
+                  <span className="ev">{grant.draftEmail.subject}</span>
+                </div>
+                <div className="email-row body-row">
+                  {emailMode === 'view'
+                    ? <pre>{emailBody}</pre>
+                    : <textarea
+                        value={emailBody}
+                        onChange={e => setEmailBody(e.target.value)}
+                        rows={14}
+                        style={{
+                          width: '100%', border: 0, outline: 'none', resize: 'none',
+                          fontFamily: 'inherit', fontSize: 13, lineHeight: 1.55, color: 'var(--ink-2)',
+                          background: 'transparent',
+                        }}
+                      />
+                  }
+                </div>
+                <div className="email-actions">
+                  {!demo && (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => { onStatusChange(grant.id, 'Sent'); onClose() }}
+                    >
+                      Send via Gmail
+                    </button>
                   )}
-                </>
-              ) : (
-                <div className="py-8 text-center">
-                  <p className="text-sm text-muted">No email drafted for this grant.</p>
+                  {emailMode === 'view'
+                    ? <button className="btn btn-sm" onClick={() => setEmailMode('edit')}>Edit</button>
+                    : <>
+                        <button className="btn btn-sm btn-primary" onClick={handleEmailSave} disabled={saving}>
+                          {saving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button className="btn btn-sm btn-ghost" onClick={() => setEmailMode('view')}>Cancel</button>
+                      </>
+                  }
+                  <button className="btn btn-sm" onClick={handleCopy}>Copy</button>
+                  {grant.link && (
+                    <a href={grant.link} target="_blank" rel="noopener noreferrer" className="btn btn-sm">
+                      Open portal ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {demo && (
+                <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 10 }}>
+                  <strong style={{ color: 'var(--ink)' }}>Demo mode:</strong> Email edits are not saved.{' '}
+                  <a href="/sign-up" style={{ color: 'var(--accent)' }}>Create an account</a> to save your workbook.
                 </div>
               )}
             </div>
           )}
 
-          {activeTab === 'history' && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xs font-medium text-subtle uppercase tracking-wider">Status history</h3>
-                {!demo && grant.status === 'eligible' && !replyMode && (
-                  <button
-                    onClick={() => setReplyMode(true)}
-                    className="text-xs px-3 py-1.5 bg-clay text-white rounded-lg hover:bg-clay-dark transition-colors font-medium"
-                  >
-                    + Log a reply
-                  </button>
+          {/* Key contact */}
+          {grant.contact && (
+            <div className="dp-section">
+              <h4>Key contact</h4>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: 'var(--bg-sunk)', border: '1px solid var(--border)',
+                  display: 'grid', placeItems: 'center',
+                  fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 13, flexShrink: 0,
+                }}>
+                  {grant.contact.name?.charAt(0) ?? '?'}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: 13.5 }}>{grant.contact.name}</div>
+                  {grant.contact.title && (
+                    <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>{grant.contact.title}</div>
+                  )}
+                  {grant.contact.email && (
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)', marginTop: 6 }}>
+                      {grant.contact.email}
+                    </div>
+                  )}
+                  {grant.contact.phone && (
+                    <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>{grant.contact.phone}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Hire a firm */}
+          {grant.hireRecommendation?.needed && (
+            <div className="dp-section">
+              <h4>Hire a firm</h4>
+              <div className="firm-card">
+                <div className="firm-name">
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    background: 'var(--accent-soft)', border: '1px solid var(--accent-soft-border)',
+                    display: 'grid', placeItems: 'center',
+                    fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12, color: 'var(--accent)',
+                  }}>
+                    {firmInitial}
+                  </div>
+                  {grant.hireRecommendation.firm}
+                  <span className="warm-pill">Warm match</span>
+                </div>
+                {grant.hireRecommendation.reason && (
+                  <div className="firm-why">{grant.hireRecommendation.reason}</div>
+                )}
+                <div className="firm-meta">
+                  {grant.hireRecommendation.contact && <span>{grant.hireRecommendation.contact}</span>}
+                  {grant.hireRecommendation.email   && <span>{grant.hireRecommendation.email}</span>}
+                </div>
+                {grant.hireRecommendation.email && !demo && (
+                  <div style={{ marginTop: 10 }}>
+                    <button className="btn btn-sm btn-accent">
+                      Send intro →
+                    </button>
+                  </div>
                 )}
               </div>
+            </div>
+          )}
 
-              {/* Reply logging panel */}
+          {/* Status history */}
+          {history.length > 0 && (
+            <div className="dp-section">
+              <h4>Status history</h4>
+              <div className="timeline">
+                {history.map((event, i) => {
+                  const isSent  = event.event?.toLowerCase().includes('sent')
+                  const isReply = event.event?.toLowerCase().includes('repl')
+                  return (
+                    <div key={i} className={`tl-item${isSent ? ' tl-sent' : isReply ? ' tl-reply' : ''}`}>
+                      <div className="tl-dot" />
+                      <div className="tl-body">
+                        <div className="tl-line">{event.event}</div>
+                        {event.note && (
+                          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.4 }}>{event.note}</div>
+                        )}
+                        <div className="tl-ts">
+                          {new Date(event.createdAt || event.date).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Log a reply */}
+          {!demo && grant.status === 'eligible' && (
+            <div className="dp-section" style={{ borderBottom: 0 }}>
+              <h4>Log a reply</h4>
+
+              {!replyMode && (
+                <button className="btn btn-sm" onClick={() => setReplyMode(true)}>
+                  + Log a reply
+                </button>
+              )}
+
               {replyMode && (
-                <div className="mb-5 border border-clay/30 rounded-xl bg-amber-50/30 p-4">
-                  <p className="text-xs font-medium text-ink mb-2">Paste the reply you received</p>
+                <>
                   <textarea
                     value={replyText}
                     onChange={e => setReplyText(e.target.value)}
-                    rows={8}
-                    placeholder="Paste the email reply here — Claude will parse the status, extract next steps, and surface any new programs mentioned..."
-                    className="w-full text-sm text-ink bg-white border border-border rounded-lg p-3 leading-relaxed resize-none focus:outline-none focus:border-clay transition-colors"
+                    className="giq-textarea"
+                    placeholder="Paste the email reply here — Claude will parse the status, extract next steps, and surface any new programs mentioned…"
+                    style={{ marginBottom: 10 }}
                   />
-                  <div className="flex gap-2 mt-3">
+                  <div style={{ display: 'flex', gap: 8 }}>
                     <button
+                      className="btn btn-sm btn-primary"
                       onClick={handleLogReply}
                       disabled={replyLoading || !replyText.trim()}
-                      className="px-4 py-1.5 bg-clay text-white text-xs rounded-lg font-medium hover:bg-clay-dark transition-colors disabled:opacity-50"
                     >
                       {replyLoading ? 'Analyzing…' : 'Analyze & log reply'}
                     </button>
                     <button
+                      className="btn btn-sm btn-ghost"
                       onClick={() => { setReplyMode(false); setReplyText('') }}
-                      className="px-4 py-1.5 text-xs text-muted hover:text-ink border border-border rounded-lg transition-colors"
                     >
                       Cancel
                     </button>
                   </div>
-                </div>
+                </>
               )}
 
-              {/* Reply result */}
               {replyResult && (
-                <div className="mb-5 bg-green-50 border border-green-100 rounded-xl p-4">
-                  <div className="font-medium text-sm text-green-800 mb-1">{replyResult.status}</div>
-                  <p className="text-xs text-green-700 leading-relaxed">{replyResult.note}</p>
+                <div className="reply-result" style={{ marginTop: 12 }}>
+                  <div className="rr-status">{replyResult.status}</div>
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>{replyResult.note}</p>
                   {replyResult.nextAction && (
-                    <p className="text-xs text-green-700 mt-2 font-medium">Next: {replyResult.nextAction}</p>
+                    <p style={{ margin: '6px 0 0', fontSize: 13, fontWeight: 500 }}>
+                      Next: {replyResult.nextAction}
+                    </p>
                   )}
                   {replyResult.newGrants?.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-green-200">
-                      <p className="text-xs font-medium text-green-800 mb-1">
-                        {replyResult.newGrants.length} new program{replyResult.newGrants.length > 1 ? 's' : ''} added to your workbook:
-                      </p>
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--st-open-border)' }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>
+                        {replyResult.newGrants.length} new program{replyResult.newGrants.length > 1 ? 's' : ''} added:
+                      </div>
                       {replyResult.newGrants.map(g => (
-                        <div key={g.id} className="text-xs text-green-700">• {g.name} — {g.estValue}</div>
+                        <div key={g.id} style={{ fontSize: 12 }}>· {g.name} — {g.estValue}</div>
                       ))}
                     </div>
                   )}
                 </div>
               )}
-
-              {/* Timeline */}
-              <div className="relative">
-                <div className="absolute left-3 top-2 bottom-2 w-px bg-border" />
-                <div className="space-y-4">
-                  {(grant.statusHistory || []).map((event, i) => (
-                    <div key={i} className="flex gap-4 pl-8 relative">
-                      <div className="absolute left-1.5 top-1.5 w-3 h-3 rounded-full bg-white border-2 border-clay" />
-                      <div>
-                        <div className="text-xs font-mono text-muted">{new Date(event.createdAt || event.date).toLocaleDateString()}</div>
-                        <div className="text-sm text-ink font-medium mt-0.5">{event.event}</div>
-                        {event.note && <div className="text-xs text-subtle mt-0.5 leading-relaxed">{event.note}</div>}
-                      </div>
-                    </div>
-                  ))}
-                  {(!grant.statusHistory || grant.statusHistory.length === 0) && !replyResult && (
-                    <p className="text-xs text-muted pl-8">No status changes yet. Send an email and log the reply here.</p>
-                  )}
-                </div>
-              </div>
             </div>
           )}
         </div>
-
-        {grant.deadline && grant.status === 'eligible' && (
-          <div className="sticky bottom-0 bg-white border-t border-border px-6 py-3 flex items-center justify-between">
-            <span className="text-xs text-muted">Deadline</span>
-            <span className="text-xs font-mono text-ink">{grant.deadline}</span>
-          </div>
-        )}
       </div>
-    </div>
+    </>
   )
 }
