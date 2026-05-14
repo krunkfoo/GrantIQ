@@ -1,4 +1,4 @@
-import { getToken } from 'next-auth/jwt'
+import { auth } from '../../../../../auth.js'
 import { db } from '../../../../../db/index.js'
 import { grantStates, checklistStates, statusHistory, grantWorkbooks, properties } from '../../../../../db/schema.js'
 import { eq, and } from 'drizzle-orm'
@@ -19,12 +19,12 @@ async function getGrantState(userId, propertyId, grantId) {
 }
 
 export async function PATCH(req, { params }) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
-  if (!token?.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { propertyId, grantId } = await params
   const body = await req.json()
-  const state = await getGrantState(token.userId, propertyId, grantId)
+  const state = await getGrantState(session.user.id, propertyId, grantId)
   if (!state) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   if (body.workflowStatus !== undefined || body.emailBody !== undefined || body.notes !== undefined) {

@@ -1,5 +1,4 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '../../../../lib/auth.js'
+import { auth } from '../../../../auth.js'
 import { db } from '../../../../db/index.js'
 import { properties, grantWorkbooks, grantStates, checklistStates } from '../../../../db/schema.js'
 import { eq, and } from 'drizzle-orm'
@@ -9,7 +8,7 @@ import GrantWorkbookClient from '../../../../components/GrantWorkbook.jsx'
 
 export default async function PropertyPage({ params }) {
   const { id } = await params
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   const userId = session.user.id
 
   const [property] = await db
@@ -33,7 +32,6 @@ export default async function PropertyPage({ params }) {
       .values({ propertyId: id })
       .returning()
 
-    // Seed grant states
     await db.insert(grantStates).values(
       allGrants.map(g => ({
         workbookId: workbook.id,
@@ -44,20 +42,17 @@ export default async function PropertyPage({ params }) {
     )
   }
 
-  // Load all grant states
   const states = await db
     .select()
     .from(grantStates)
     .where(eq(grantStates.workbookId, workbook.id))
 
-  // Load all checklist states in one query via workbook join
   const allChecklists = await db
     .select({ grantStateId: checklistStates.grantStateId, itemIndex: checklistStates.itemIndex, done: checklistStates.done })
     .from(checklistStates)
     .innerJoin(grantStates, eq(checklistStates.grantStateId, grantStates.id))
     .where(eq(grantStates.workbookId, workbook.id))
 
-  // Merge DB state into grant definitions
   const mergedGrants = allGrants.map(g => {
     const state = states.find(s => s.grantId === g.id)
     const itemChecks = allChecklists.filter(c => c.grantStateId === state?.id)

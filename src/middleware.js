@@ -1,4 +1,4 @@
-import { getToken } from 'next-auth/jwt'
+import { auth } from './auth.js'
 import { NextResponse } from 'next/server'
 
 const publicPaths = ['/', '/demo', '/sign-in', '/sign-up', '/api/auth']
@@ -7,19 +7,16 @@ function isPublic(pathname) {
   return publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))
 }
 
-export async function middleware(req) {
+export default auth((req) => {
   const { pathname } = req.nextUrl
   if (isPublic(pathname)) return NextResponse.next()
-
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
-  if (!token) {
-    const signIn = new URL('/sign-in', req.url)
-    signIn.searchParams.set('callbackUrl', req.url)
-    return NextResponse.redirect(signIn)
+  if (!req.auth) {
+    const url = new URL('/sign-in', req.url)
+    url.searchParams.set('callbackUrl', req.url)
+    return NextResponse.redirect(url)
   }
-
   return NextResponse.next()
-}
+})
 
 export const config = {
   matcher: [

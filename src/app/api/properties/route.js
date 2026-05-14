@@ -1,23 +1,23 @@
-import { getToken } from 'next-auth/jwt'
+import { auth } from '../../../auth.js'
 import { db } from '../../../db/index.js'
 import { properties } from '../../../db/schema.js'
 import { eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 
-export async function GET(req) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
-  if (!token?.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const rows = await db.select().from(properties).where(eq(properties.userId, token.userId))
+export async function GET() {
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const rows = await db.select().from(properties).where(eq(properties.userId, session.user.id))
   return NextResponse.json(rows)
 }
 
 export async function POST(req) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
-  if (!token?.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json()
   const [property] = await db
     .insert(properties)
-    .values({ userId: token.userId, ...body })
+    .values({ userId: session.user.id, ...body })
     .returning()
   return NextResponse.json(property)
 }

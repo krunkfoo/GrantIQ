@@ -1,12 +1,11 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '../../../lib/auth.js'
+import { auth } from '../../../auth.js'
 import { db } from '../../../db/index.js'
 import { properties } from '../../../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
 import Link from 'next/link'
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   const userId = session.user.id
   const userProperties = await db
     .select()
@@ -59,7 +58,6 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Demo shortcut */}
       <div className="mt-10 pt-8 border-t border-border">
         <Link href="/demo" className="text-xs text-muted hover:text-subtle transition-colors">
           Try demo with Hotel Mac, Point Richmond →
