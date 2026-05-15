@@ -133,7 +133,7 @@ export default function GrantDetailPanel({
     setStepDetail(d => ({ ...d, [index]: { loading: true } }))
 
     if (demo) {
-      setStepDetail(d => ({ ...d, [index]: { loading: false, bullets: ['Sign up for a free account to get step-by-step guidance for each application step.'] } }))
+      setStepDetail(d => ({ ...d, [index]: { loading: false, bullets: ['__signup__'] } }))
       return
     }
 
@@ -372,7 +372,12 @@ export default function GrantDetailPanel({
                           {det?.bullets && (
                             <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
                               {det.bullets.map((b, bi) => (
-                                <li key={bi} style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-2)' }}>{b}</li>
+                                <li key={bi} style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-2)' }}>
+                                  {b === '__signup__'
+                                    ? <><a href="/sign-up" style={{ color: 'var(--accent)', fontWeight: 500 }}>Create a free account</a> to get step-by-step guidance for each application step.</>
+                                    : b
+                                  }
+                                </li>
                               ))}
                             </ul>
                           )}
