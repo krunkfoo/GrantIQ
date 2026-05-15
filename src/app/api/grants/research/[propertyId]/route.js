@@ -119,30 +119,37 @@ export async function POST(req, { params }) {
 
     const raw = message.content[0].text.trim()
 
+    console.log(`[research] stop_reason=${message.stop_reason} output_chars=${raw.length} input_tokens=${message.usage?.input_tokens} output_tokens=${message.usage?.output_tokens}`)
+
     // Strip any accidental markdown fences
     const stripped = raw.startsWith('[') ? raw : raw.replace(/^```json?\n?/, '').replace(/\n?```$/, '')
 
     // Detect truncation — if stop_reason is max_tokens the JSON is incomplete
     if (message.stop_reason === 'max_tokens') {
-      throw new Error('Claude response was truncated (max_tokens reached). The property scope may be too broad — try narrowing the project description.')
+      console.error(`[research] TRUNCATED — output_tokens=${message.usage?.output_tokens} max_tokens=16000 chars=${raw.length}`)
+      throw new Error(`Response truncated at ${message.usage?.output_tokens} tokens (${raw.length} chars). Reduce property scope or try again.`)
     }
 
     let grants
     try {
       grants = JSON.parse(stripped)
+      console.log(`[research] parsed OK — ${grants.length} grants`)
     } catch (parseErr) {
+      console.error(`[research] JSON parse failed — chars=${stripped.length} stop_reason=${message.stop_reason} err=${parseErr.message}`)
+      console.error(`[research] tail of response: ...${stripped.slice(-200)}`)
+
       // Attempt to salvage a partial array by closing it
       const lastComma = stripped.lastIndexOf(',')
-      const truncated = lastComma > 0 ? stripped.slice(0, lastComma) + ']' : null
-      if (truncated) {
+      const salvage = lastComma > 0 ? stripped.slice(0, lastComma) + ']' : null
+      if (salvage) {
         try {
-          grants = JSON.parse(truncated)
-          console.warn('Salvaged partial grants array — some grants may be missing')
+          grants = JSON.parse(salvage)
+          console.warn(`[research] salvaged ${grants.length} grants (partial — some truncated)`)
         } catch {
-          throw new Error(`JSON parse failed: ${parseErr.message}. Response length: ${stripped.length} chars. stop_reason: ${message.stop_reason}`)
+          throw new Error(`JSON parse failed after ${raw.length} chars (stop_reason=${message.stop_reason}, output_tokens=${message.usage?.output_tokens}): ${parseErr.message}`)
         }
       } else {
-        throw new Error(`JSON parse failed: ${parseErr.message}. Response length: ${stripped.length} chars.`)
+        throw new Error(`JSON parse failed after ${raw.length} chars (stop_reason=${message.stop_reason}): ${parseErr.message}`)
       }
     }
 
@@ -169,7 +176,7 @@ export async function POST(req, { params }) {
 
     return NextResponse.json({ ok: true, count: grants.length })
   } catch (err) {
-    console.error('Grant research error:', err)
+    console.error('[research] fatal error:', err.message)
     await db.update(grantWorkbooks)
       .set({ researchStatus: 'error' })
       .where(eq(grantWorkbooks.id, workbook.id))
