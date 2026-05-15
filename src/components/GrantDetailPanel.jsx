@@ -66,19 +66,9 @@ function statusBadgeClass(status) {
 /* ── main component ──────────────────────────────────────── */
 
 export default function GrantDetailPanel({
-  grant, demo, propertyId,
-  onClose, onStatusChange, onEmailSave, onChecklistToggle, onReplyLogged,
+  grant, demo,
+  onClose, onStatusChange, onChecklistToggle,
 }) {
-  const [emailMode, setEmailMode]     = useState('view')
-  const [emailBody, setEmailBody]     = useState(grant.emailBody || grant.draftEmail?.body || '')
-  const [draftEmail, setDraftEmail]   = useState(grant.draftEmail || null)
-  const [draftLoading, setDraftLoading] = useState(false)
-  const [draftError, setDraftError]   = useState(null)
-  const [saving, setSaving]           = useState(false)
-  const [replyMode, setReplyMode]     = useState(false)
-  const [replyText, setReplyText]     = useState('')
-  const [replyLoading, setReplyLoading] = useState(false)
-  const [replyResult, setReplyResult] = useState(null)
 
   // Esc to close
   useEffect(() => {
@@ -87,60 +77,6 @@ export default function GrantDetailPanel({
     return () => document.removeEventListener('keydown', handleKey)
   }, [onClose])
 
-  const handleLogReply = async () => {
-    if (!replyText.trim()) return
-    setReplyLoading(true)
-    setReplyResult(null)
-    try {
-      const res = await fetch(`/api/grants/${propertyId}/${grant.id}/reply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emailContent: replyText }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setReplyResult(data)
-        onStatusChange(grant.id, data.status)
-        if (onReplyLogged) onReplyLogged(data)
-        setReplyText('')
-        setReplyMode(false)
-      }
-    } finally {
-      setReplyLoading(false)
-    }
-  }
-
-  const handleEmailSave = async () => {
-    setSaving(true)
-    await onEmailSave(grant.id, emailBody)
-    setSaving(false)
-    setEmailMode('view')
-  }
-
-  const handleCopy = () => navigator.clipboard.writeText(emailBody)
-
-  const handleGenerateDraft = async () => {
-    setDraftLoading(true)
-    setDraftError(null)
-    try {
-      const res = await fetch('/api/grants/draft-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ propertyId, grant }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setDraftEmail(data.draft)
-        setEmailBody(data.draft.body)
-      } else {
-        setDraftError(data.error || 'Failed to generate draft')
-      }
-    } catch (e) {
-      setDraftError(e.message)
-    } finally {
-      setDraftLoading(false)
-    }
-  }
 
   const isIneligible  = grant.status === 'ineligible'
   const checkedCount  = (grant.checklist || []).filter(c => c.done).length
@@ -267,86 +203,6 @@ export default function GrantDetailPanel({
             </div>
           )}
 
-          {/* Pre-drafted email */}
-          {!isIneligible && (
-            <div className="dp-section">
-              <h4>Draft email</h4>
-              {!draftEmail && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={handleGenerateDraft}
-                    disabled={draftLoading}
-                    style={{ alignSelf: 'flex-start' }}
-                  >
-                    {draftLoading ? 'Generating…' : '✦ Generate draft email'}
-                  </button>
-                  {draftError && (
-                    <span style={{ fontSize: 12, color: 'var(--st-bad)' }}>{draftError}</span>
-                  )}
-                </div>
-              )}
-              {draftEmail && (
-              <div className="email-card">
-                <div className="email-row">
-                  <span className="ek">To</span>
-                  <span className="ev" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{draftEmail.to}</span>
-                </div>
-                <div className="email-row">
-                  <span className="ek">Subject</span>
-                  <span className="ev">{draftEmail.subject}</span>
-                </div>
-                <div className="email-row body-row">
-                  {emailMode === 'view'
-                    ? <pre>{emailBody}</pre>
-                    : <textarea
-                        value={emailBody}
-                        onChange={e => setEmailBody(e.target.value)}
-                        rows={14}
-                        style={{
-                          width: '100%', border: 0, outline: 'none', resize: 'none',
-                          fontFamily: 'inherit', fontSize: 13, lineHeight: 1.55, color: 'var(--ink-2)',
-                          background: 'transparent',
-                        }}
-                      />
-                  }
-                </div>
-                <div className="email-actions">
-                  {!demo && (
-                    <button
-                      className="btn btn-sm btn-primary"
-                      onClick={() => { onStatusChange(grant.id, 'Sent'); onClose() }}
-                    >
-                      Send via Gmail
-                    </button>
-                  )}
-                  {emailMode === 'view'
-                    ? <button className="btn btn-sm" onClick={() => setEmailMode('edit')}>Edit</button>
-                    : <>
-                        <button className="btn btn-sm btn-primary" onClick={handleEmailSave} disabled={saving}>
-                          {saving ? 'Saving…' : 'Save'}
-                        </button>
-                        <button className="btn btn-sm btn-ghost" onClick={() => setEmailMode('view')}>Cancel</button>
-                      </>
-                  }
-                  <button className="btn btn-sm" onClick={handleCopy}>Copy</button>
-                  {grant.link && (
-                    <a href={grant.link} target="_blank" rel="noopener noreferrer" className="btn btn-sm">
-                      Open portal ↗
-                    </a>
-                  )}
-                </div>
-              </div>
-              )}
-
-              {demo && (
-                <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 10 }}>
-                  <strong style={{ color: 'var(--ink)' }}>Demo mode:</strong> Email edits are not saved.{' '}
-                  <a href="/sign-up" style={{ color: 'var(--accent)' }}>Create an account</a> to save your workbook.
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Key contact */}
           {grant.contact && (
@@ -441,67 +297,6 @@ export default function GrantDetailPanel({
             </div>
           )}
 
-          {/* Log a reply */}
-          {!demo && grant.status === 'eligible' && (
-            <div className="dp-section" style={{ borderBottom: 0 }}>
-              <h4>Log a reply</h4>
-
-              {!replyMode && (
-                <button className="btn btn-sm" onClick={() => setReplyMode(true)}>
-                  + Log a reply
-                </button>
-              )}
-
-              {replyMode && (
-                <>
-                  <textarea
-                    value={replyText}
-                    onChange={e => setReplyText(e.target.value)}
-                    className="giq-textarea"
-                    placeholder="Paste the email reply here — Claude will parse the status, extract next steps, and surface any new programs mentioned…"
-                    style={{ marginBottom: 10 }}
-                  />
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      className="btn btn-sm btn-primary"
-                      onClick={handleLogReply}
-                      disabled={replyLoading || !replyText.trim()}
-                    >
-                      {replyLoading ? 'Analyzing…' : 'Analyze & log reply'}
-                    </button>
-                    <button
-                      className="btn btn-sm btn-ghost"
-                      onClick={() => { setReplyMode(false); setReplyText('') }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {replyResult && (
-                <div className="reply-result" style={{ marginTop: 12 }}>
-                  <div className="rr-status">{replyResult.status}</div>
-                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>{replyResult.note}</p>
-                  {replyResult.nextAction && (
-                    <p style={{ margin: '6px 0 0', fontSize: 13, fontWeight: 500 }}>
-                      Next: {replyResult.nextAction}
-                    </p>
-                  )}
-                  {replyResult.newGrants?.length > 0 && (
-                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--st-open-border)' }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>
-                        {replyResult.newGrants.length} new program{replyResult.newGrants.length > 1 ? 's' : ''} added:
-                      </div>
-                      {replyResult.newGrants.map(g => (
-                        <div key={g.id} style={{ fontSize: 12 }}>· {g.name} — {g.estValue}</div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </>

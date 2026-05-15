@@ -315,7 +315,7 @@ function CardGrid({ filtered, onSelect }) {
 
 /* ── Main component ──────────────────────────────────────── */
 
-export default function GrantWorkbook({ property, grants: initialGrants, workbookId, demo, gmailConnected }) {
+export default function GrantWorkbook({ property, grants: initialGrants, workbookId, demo }) {
   const [grants, setGrants] = useState(initialGrants)
   const [view, setView] = useState('table')
   const [selectedGrant, setSelectedGrant] = useState(null)
@@ -323,8 +323,6 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
   const [openFilter, setOpenFilter] = useState('all') // All / Open / Watch / Ineligible
   const [typeFilter, setTypeFilter] = useState('all')
   const [search, setSearch] = useState('')
-  const [syncing, setSyncing] = useState(false)
-  const [syncResult, setSyncResult] = useState(null)
 
   /* ── persistence ── */
 
@@ -347,50 +345,6 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
     persist(grantId, { workflowStatus })
   }, [updateGrant, persist])
 
-  const handleEmailSave = useCallback((grantId, emailBody) => {
-    updateGrant(grantId, { emailBody })
-    persist(grantId, { emailBody })
-  }, [updateGrant, persist])
-
-  const handleReplyLogged = useCallback((data) => {
-    if (data.newGrants?.length > 0) {
-      setGrants(prev => {
-        const existingIds = new Set(prev.map(g => g.id))
-        const toAdd = data.newGrants
-          .filter(g => !existingIds.has(g.id))
-          .map(g => ({
-            ...g,
-            workflowStatus: 'Not started',
-            checklist: g.checklist ?? [],
-            eligibilityChecks: g.eligibilityChecks ?? [],
-            steps: g.steps ?? [],
-          }))
-        return toAdd.length > 0 ? [...prev, ...toAdd] : prev
-      })
-    }
-  }, [])
-
-  const handleSyncInbox = useCallback(async () => {
-    if (demo || syncing) return
-    setSyncing(true)
-    setSyncResult(null)
-    try {
-      const res = await fetch(`/api/inbox/sync/${property.id}`, { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) {
-        setSyncResult({ error: data.error ?? `HTTP ${res.status}`, gmailRequired: data.gmailRequired })
-      } else {
-        setSyncResult({ updates: data.updates, scanned: data.scanned, message: data.message })
-        if (data.updates?.length > 0) {
-          data.updates.forEach(u => updateGrant(u.grantId, { workflowStatus: u.status }))
-        }
-      }
-    } catch (err) {
-      setSyncResult({ error: err.message })
-    } finally {
-      setSyncing(false)
-    }
-  }, [demo, syncing, property.id, updateGrant])
 
   const handleChecklistToggle = useCallback((grantId, itemIndex, done) => {
     setGrants(prev => prev.map(g => {
@@ -446,17 +400,6 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
         <div className="t-spacer" />
         <div className="t-actions">
           {!demo && (
-            <button
-              onClick={handleSyncInbox}
-              disabled={syncing}
-              className="btn btn-sm"
-              title={gmailConnected ? 'Scan inbox for grant replies' : 'Connect Gmail to enable inbox sync'}
-            >
-              {Icons.sync}
-              {syncing ? 'Syncing…' : 'Sync inbox'}
-            </button>
-          )}
-          {!demo && (
             <a href="/sign-out" className="btn btn-sm btn-ghost">Sign out</a>
           )}
         </div>
@@ -485,11 +428,6 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
           </button>
 
           <button className="s-nav" onClick={() => {}}>
-            <span className="s-ico">{Icons.inbox}</span>
-            Inbox sync
-          </button>
-
-          <button className="s-nav" onClick={() => {}}>
             <span className="s-ico">{Icons.people}</span>
             Consultants
           </button>
@@ -503,38 +441,10 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
 
           <div className="s-spacer" />
 
-          {!gmailConnected && !demo && (
-            <div className="inbox-card">
-              <div className="ic-title">Connect Gmail</div>
-              <div className="ic-sub">
-                Automatically detect grant replies and track application status.
-              </div>
-              <a href="/connect/gmail" className="btn btn-sm btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
-                Connect Gmail
-              </a>
-            </div>
-          )}
         </aside>
 
         {/* ── Content ── */}
         <div className="giq-content">
-          {/* Sync banner */}
-          {syncResult && (
-            <div className={`sync-banner${syncResult.error ? ' err' : ' ok'}`}>
-              <span>
-                {syncResult.error
-                  ? syncResult.gmailRequired
-                    ? 'Gmail not connected — sign in with Google to enable inbox sync.'
-                    : `Sync failed: ${syncResult.error}`
-                  : syncResult.message
-                    ? syncResult.message
-                    : `Scanned ${syncResult.scanned} thread${syncResult.scanned !== 1 ? 's' : ''} — ${syncResult.updates?.length ?? 0} grant${syncResult.updates?.length !== 1 ? 's' : ''} updated.`
-                }
-              </span>
-              <button onClick={() => setSyncResult(null)} className="btn btn-sm btn-ghost">✕</button>
-            </div>
-          )}
-
           {/* Page header */}
           <div className="page-header">
             <div className="ph-title">
@@ -651,12 +561,9 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
         <GrantDetailPanel
           grant={selectedGrant}
           demo={demo}
-          propertyId={property.id}
           onClose={() => setSelectedGrant(null)}
           onStatusChange={handleStatusChange}
-          onEmailSave={handleEmailSave}
           onChecklistToggle={handleChecklistToggle}
-          onReplyLogged={handleReplyLogged}
         />
       )}
     </div>

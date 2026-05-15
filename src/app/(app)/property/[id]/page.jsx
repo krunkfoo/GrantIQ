@@ -84,7 +84,6 @@ export default async function PropertyPage({ params }) {
       grants={mergedGrants}
       workbookId={workbook.id}
       demo={false}
-      gmailConnected={!!session.gmailConnected}
     />
   )
 }

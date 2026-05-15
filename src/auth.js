@@ -33,14 +33,6 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      // Request Gmail read access so we can sync replies
-      authorization: {
-        params: {
-          scope: 'openid email profile https://www.googleapis.com/auth/gmail.readonly',
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      },
     })
   )
 }
@@ -65,9 +57,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               .returning()
           }
           token.userId = dbUser.id
-          // Store Gmail access token for inbox sync
-          token.gmailAccessToken = account.access_token ?? null
-          token.gmailRefreshToken = account.refresh_token ?? null
         } else {
           token.userId = user.id
         }
@@ -76,10 +65,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (token.userId) session.user.id = String(token.userId)
-      // Expose whether Gmail is connected (not the token itself)
-      session.gmailConnected = !!token.gmailAccessToken
-      // Pass token to server — only accessible server-side via auth()
-      session._gmailAccessToken = token.gmailAccessToken ?? null
       return session
     },
   },
