@@ -76,6 +76,8 @@ export default function GrantDetailPanel({
   const [emailBody, setEmailBody]           = useState(grant.draftEmail?.body ?? '')
   const [emailEditing, setEmailEditing]     = useState(false)
   const [copied, setCopied]                 = useState(false)
+  const [expandedStep, setExpandedStep]     = useState(null) // index of expanded step
+  const [stepDetail, setStepDetail]         = useState({})   // { [index]: { loading, bullets } }
 
   // Esc to close
   useEffect(() => {
@@ -106,6 +108,24 @@ export default function GrantDetailPanel({
     const sub = encodeURIComponent(grant.draftEmail?.subject ?? '')
     const bod = encodeURIComponent(emailBody)
     window.location.href = `mailto:${to}?subject=${sub}&body=${bod}`
+  }
+
+  const handleStepClick = async (step, index) => {
+    if (expandedStep === index) { setExpandedStep(null); return }
+    setExpandedStep(index)
+    if (stepDetail[index]) return // already loaded
+    setStepDetail(d => ({ ...d, [index]: { loading: true } }))
+    try {
+      const res = await fetch('/api/grants/step-detail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grantName: grant.name, step, contact: grant.contact }),
+      })
+      const data = await res.json()
+      setStepDetail(d => ({ ...d, [index]: { loading: false, bullets: data.bullets ?? [] } }))
+    } catch {
+      setStepDetail(d => ({ ...d, [index]: { loading: false, bullets: ['Could not load detail — try again.'] } }))
+    }
   }
 
 
@@ -293,14 +313,47 @@ export default function GrantDetailPanel({
             </div>
           )}
 
-          {/* Application steps */}
+          {/* Application steps — click to expand how-to */}
           {(grant.steps || []).length > 0 && !isIneligible && (
             <div className="dp-section">
-              <h4>Application steps</h4>
+              <h4>Application steps <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--ink-4)', textTransform: 'none', letterSpacing: 0 }}>— click any step for guidance</span></h4>
               <div className="dp-steps">
-                {grant.steps.map((step, i) => (
-                  <div key={i} className="dp-step">{step}</div>
-                ))}
+                {grant.steps.map((step, i) => {
+                  const open = expandedStep === i
+                  const det  = stepDetail[i]
+                  return (
+                    <div key={i}>
+                      <div
+                        className="dp-step"
+                        onClick={() => handleStepClick(step, i)}
+                        style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}
+                      >
+                        <span>{step}</span>
+                        <span style={{ fontSize: 11, color: 'var(--ink-4)', flexShrink: 0, marginTop: 2 }}>
+                          {open ? '▲' : '▼'}
+                        </span>
+                      </div>
+                      {open && (
+                        <div style={{
+                          margin: '0 0 4px 0', padding: '12px 14px',
+                          background: 'var(--bg-sunk)', borderRadius: '0 0 var(--radius) var(--radius)',
+                          borderTop: '1px solid var(--border)',
+                        }}>
+                          {det?.loading && (
+                            <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>Loading guidance…</div>
+                          )}
+                          {det?.bullets && (
+                            <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {det.bullets.map((b, bi) => (
+                                <li key={bi} style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-2)' }}>{b}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

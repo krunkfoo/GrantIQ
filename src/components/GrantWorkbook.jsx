@@ -313,16 +313,78 @@ function CardGrid({ filtered, onSelect }) {
   )
 }
 
+/* ── Consultants view ────────────────────────────────────── */
+
+function ConsultantsView({ consultants, grants, onSelectGrant }) {
+  if (consultants.length === 0) {
+    return (
+      <div style={{ padding: '64px 32px', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
+        No consultant recommendations yet — run research on a property to see firms.
+      </div>
+    )
+  }
+  return (
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+        These firms are recommended across your grants. Click a grant to open it.
+      </p>
+      {consultants.map(c => (
+        <div key={c.firm} style={{
+          background: 'var(--bg-panel)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)', padding: '18px 20px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{c.firm}</div>
+              {c.contact && <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>{c.contact}</div>}
+              {c.email && (
+                <a href={`mailto:${c.email}`} style={{ fontSize: 12, color: 'var(--accent)', display: 'block', marginTop: 4, textDecoration: 'none' }}>
+                  {c.email}
+                </a>
+              )}
+            </div>
+            {c.email && (
+              <a href={`mailto:${c.email}`} className="btn btn-sm btn-primary" style={{ flexShrink: 0 }}>
+                Email firm →
+              </a>
+            )}
+          </div>
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {c.grants.map(g => {
+              const fullGrant = grants.find(gr => gr.id === g.id)
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => fullGrant && onSelectGrant(fullGrant)}
+                  style={{
+                    textAlign: 'left', background: 'var(--bg-sunk)', border: '1px solid var(--border)',
+                    borderRadius: 'calc(var(--radius) - 2px)', padding: '10px 14px', cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)' }}>{g.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 3, lineHeight: 1.4 }}>{g.reason}</div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ── Main component ──────────────────────────────────────── */
 
 export default function GrantWorkbook({ property, grants: initialGrants, workbookId, demo }) {
   const [grants, setGrants] = useState(initialGrants)
   const [view, setView] = useState('table')
+  const [mainView, setMainView] = useState('workbook') // 'workbook' | 'consultants'
   const [selectedGrant, setSelectedGrant] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [openFilter, setOpenFilter] = useState('all') // All / Open / Watch / Ineligible
   const [typeFilter, setTypeFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [rerunning, setRerunning] = useState(false)
 
   /* ── persistence ── */
 
@@ -365,6 +427,32 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
     persist(grantId, { checklistIndex: itemIndex, done })
   }, [persist])
 
+  const handleRerunResearch = useCallback(async () => {
+    if (demo || rerunning) return
+    setRerunning(true)
+    try {
+      // Reset status so the property page shows the loader again
+      await fetch(`/api/grants/research/${property.id}`, { method: 'POST' })
+      window.location.reload()
+    } catch {
+      setRerunning(false)
+    }
+  }, [demo, rerunning, property.id])
+
+  /* ── consultants — aggregate hireRecommendation across all grants ── */
+  const consultants = (() => {
+    const map = new Map()
+    for (const g of grants) {
+      const hr = g.hireRecommendation
+      if (!hr?.needed || !hr.firm) continue
+      if (!map.has(hr.firm)) {
+        map.set(hr.firm, { firm: hr.firm, contact: hr.contact, email: hr.email, grants: [] })
+      }
+      map.get(hr.firm).grants.push({ name: g.name, id: g.id, reason: hr.reason })
+    }
+    return [...map.values()]
+  })()
+
   /* ── stats ── */
 
   const eligibleGrants  = grants.filter(g => g.status === 'eligible')
@@ -406,6 +494,16 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
         <div className="t-spacer" />
         <div className="t-actions">
           {!demo && (
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={handleRerunResearch}
+              disabled={rerunning}
+              title="Re-run grant research with latest AI prompt"
+            >
+              {rerunning ? 'Re-running…' : '↺ Re-run research'}
+            </button>
+          )}
+          {!demo && (
             <a href="/sign-out" className="btn btn-sm btn-ghost">Sign out</a>
           )}
         </div>
@@ -425,17 +523,21 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
           <div className="s-label">Workbook</div>
 
           <button
-            className="s-nav active"
-            onClick={() => {}}
+            className={`s-nav${mainView === 'workbook' ? ' active' : ''}`}
+            onClick={() => setMainView('workbook')}
           >
             <span className="s-ico">{Icons.table}</span>
             Grant workbook
             <span className="s-count">{eligibleGrants.length}</span>
           </button>
 
-          <button className="s-nav" onClick={() => {}}>
+          <button
+            className={`s-nav${mainView === 'consultants' ? ' active' : ''}`}
+            onClick={() => setMainView('consultants')}
+          >
             <span className="s-ico">{Icons.people}</span>
             Consultants
+            {consultants.length > 0 && <span className="s-count">{consultants.length}</span>}
           </button>
 
           <div className="s-label">Account</div>
@@ -495,8 +597,8 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
             </div>
           </div>
 
-          {/* Toolbar */}
-          <div className="giq-toolbar">
+          {/* Toolbar — hidden in consultants view */}
+          <div className="giq-toolbar" style={{ display: mainView === 'consultants' ? 'none' : undefined }}>
             {/* Status seg */}
             <div className="seg">
               {[
@@ -555,9 +657,11 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
           </div>
 
           {/* Main view */}
-          {view === 'table'
-            ? <WorkbookTable filtered={filtered} onSelect={setSelectedGrant} />
-            : <CardGrid filtered={filtered} onSelect={setSelectedGrant} />
+          {mainView === 'consultants'
+            ? <ConsultantsView consultants={consultants} grants={grants} onSelectGrant={g => { setMainView('workbook'); setSelectedGrant(g) }} />
+            : view === 'table'
+              ? <WorkbookTable filtered={filtered} onSelect={setSelectedGrant} />
+              : <CardGrid filtered={filtered} onSelect={setSelectedGrant} />
           }
         </div>
       </div>
