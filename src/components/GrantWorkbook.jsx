@@ -671,6 +671,7 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
         <GrantDetailPanel
           grant={selectedGrant}
           demo={demo}
+          property={property}
           onClose={() => setSelectedGrant(null)}
           onStatusChange={handleStatusChange}
           onChecklistToggle={handleChecklistToggle}

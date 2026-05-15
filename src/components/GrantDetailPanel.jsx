@@ -65,15 +65,31 @@ function statusBadgeClass(status) {
 
 /* ── main component ──────────────────────────────────────── */
 
+function useFill(property) {
+  return (text) => {
+    if (!text || !property) return text
+    return text
+      .replaceAll('{{ADDRESS}}', property.address ?? '')
+      .replaceAll('{{CITY}}', property.city?.split(',')[0]?.trim() ?? property.city ?? '')
+      .replaceAll('{{STATE}}', 'California')
+      .replaceAll('{{SCOPE}}', property.scope ?? '')
+      .replaceAll('{{BUDGET}}', property.budget ?? '')
+      .replaceAll('{{START_DATE}}', property.startDate ?? '')
+      .replaceAll('{ADDRESS}', property.address ?? '')
+      .replaceAll('{CITY}', property.city?.split(',')[0]?.trim() ?? '')
+  }
+}
+
 export default function GrantDetailPanel({
-  grant, demo,
+  grant, demo, property,
   onClose, onStatusChange, onChecklistToggle, onPatch,
 }) {
+  const fill = useFill(property)
   const [editingContact, setEditingContact] = useState(false)
   const [contactDraft, setContactDraft]     = useState(grant.contact ?? {})
   const [notes, setNotes]                   = useState(grant.notes ?? '')
   const [notesSaved, setNotesSaved]         = useState(false)
-  const [emailBody, setEmailBody]           = useState(grant.draftEmail?.body ?? '')
+  const [emailBody, setEmailBody]           = useState(() => fill(grant.draftEmail?.body ?? ''))
   const [emailEditing, setEmailEditing]     = useState(false)
   const [copied, setCopied]                 = useState(false)
   const [expandedStep, setExpandedStep]     = useState(null) // index of expanded step
@@ -105,7 +121,7 @@ export default function GrantDetailPanel({
 
   const openInMail = () => {
     const to  = grant.draftEmail?.to?.match(/<(.+)>/)?.[1] ?? grant.contact?.email ?? ''
-    const sub = encodeURIComponent(grant.draftEmail?.subject ?? '')
+    const sub = encodeURIComponent(fill(grant.draftEmail?.subject ?? ''))
     const bod = encodeURIComponent(emailBody)
     window.location.href = `mailto:${to}?subject=${sub}&body=${bod}`
   }
@@ -115,11 +131,22 @@ export default function GrantDetailPanel({
     setExpandedStep(index)
     if (stepDetail[index]) return // already loaded
     setStepDetail(d => ({ ...d, [index]: { loading: true } }))
+
+    if (demo) {
+      setStepDetail(d => ({ ...d, [index]: { loading: false, bullets: ['Sign up for a free account to get step-by-step guidance for each application step.'] } }))
+      return
+    }
+
     try {
       const res = await fetch('/api/grants/step-detail', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grantName: grant.name, step, contact: grant.contact }),
+        body: JSON.stringify({
+          grantName: grant.name,
+          step: fill(step),
+          contact: grant.contact,
+          property: { address: property?.address, city: property?.city, scope: property?.scope },
+        }),
       })
       const data = await res.json()
       setStepDetail(d => ({ ...d, [index]: { loading: false, bullets: data.bullets ?? [] } }))
@@ -220,7 +247,7 @@ export default function GrantDetailPanel({
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)', width: 42, flexShrink: 0 }}>Subject</span>
-                    <span style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>{grant.draftEmail.subject}</span>
+                    <span style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>{fill(grant.draftEmail.subject)}</span>
                   </div>
                 </div>
                 <div style={{ padding: '12px 14px' }}>
@@ -255,7 +282,7 @@ export default function GrantDetailPanel({
                 borderRadius: 'var(--radius)', padding: '12px 14px',
                 color: 'var(--st-bad)', fontSize: 13, lineHeight: 1.5,
               }}>
-                {grant.ineligibleReason}
+                {fill(grant.ineligibleReason)}
               </div>
               <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>
                 Re-screen automatically if your project scope or property status changes.
@@ -267,7 +294,7 @@ export default function GrantDetailPanel({
           {!isIneligible && grant.useFor && (
             <div className="dp-section">
               <h4>Use this grant for</h4>
-              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: 'var(--ink-2)' }}>{grant.useFor}</p>
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: 'var(--ink-2)' }}>{fill(grant.useFor)}</p>
             </div>
           )}
 
@@ -328,7 +355,7 @@ export default function GrantDetailPanel({
                         onClick={() => handleStepClick(step, i)}
                         style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}
                       >
-                        <span>{step}</span>
+                        <span>{fill(step)}</span>
                         <span style={{ fontSize: 11, color: 'var(--ink-4)', flexShrink: 0, marginTop: 2 }}>
                           {open ? '▲' : '▼'}
                         </span>
@@ -484,7 +511,7 @@ export default function GrantDetailPanel({
                   <span className="warm-pill">Warm match</span>
                 </div>
                 {grant.hireRecommendation.reason && (
-                  <div className="firm-why">{grant.hireRecommendation.reason}</div>
+                  <div className="firm-why">{fill(grant.hireRecommendation.reason)}</div>
                 )}
                 <div className="firm-meta">
                   {grant.hireRecommendation.contact && <span>{grant.hireRecommendation.contact}</span>}
@@ -492,9 +519,23 @@ export default function GrantDetailPanel({
                 </div>
                 {grant.hireRecommendation.email && !demo && (
                   <div style={{ marginTop: 10 }}>
-                    <button className="btn btn-sm btn-accent">
+                    <a
+                      className="btn btn-sm btn-accent"
+                      href={(() => {
+                        const hr = grant.hireRecommendation
+                        const sub = encodeURIComponent(`${grant.name} — Seeking Consultant for ${grant.type} Application`)
+                        const body = encodeURIComponent(
+                          `Hi${hr.contact ? ` ${hr.contact.split(' ')[0]}` : ''},\n\n` +
+                          `I'm working on a grant application for ${grant.name} and was referred to ${hr.firm} as a firm with relevant experience.\n\n` +
+                          `${hr.reason}\n\n` +
+                          `Would you have 20 minutes to connect this week to discuss whether we'd be a good fit?\n\n` +
+                          `Thank you,\n[Your name]\n[Your phone]`
+                        )
+                        return `mailto:${hr.email}?subject=${sub}&body=${body}`
+                      })()}
+                    >
                       Send intro →
-                    </button>
+                    </a>
                   </div>
                 )}
               </div>
