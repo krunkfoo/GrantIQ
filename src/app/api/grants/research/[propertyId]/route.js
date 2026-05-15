@@ -61,6 +61,7 @@ Rules:
 7. Rank eligible grants by est. value (highest first).
 8. Return at most 12 grants total. Prioritize the highest-value eligible programs; lump minor ineligible programs into a single "Other programs reviewed — ineligible" entry if needed.
 9. Keep checklist labels SHORT (under 8 words each). Keep steps SHORT (1 sentence each). Max 4 steps and 4 checklist items per grant. Max 2 eligibilityChecks per grant.
+10. For ELIGIBLE grants only: write a ready-to-send outreach email FROM the property owner TO the program contact. Use the actual property address and project scope. Max 120 words. Sign off with "[Your name]" only. Make it specific enough that the recipient knows exactly which property and what you're asking.
 
 Return a JSON array. Each element must match this EXACT schema (no extra fields):
 {
@@ -86,6 +87,11 @@ Return a JSON array. Each element must match this EXACT schema (no extra fields)
     "title": "Title",
     "email": "email@domain.com",
     "phone": "(XXX) XXX-XXXX"
+  } | null,
+  "draftEmail": {
+    "to": "Contact Name <email@domain.com>",
+    "subject": "Subject line — include actual address",
+    "body": "Email body, max 120 words, fully written out with real values"
   } | null,
   "hireRecommendation": {
     "needed": true | false,

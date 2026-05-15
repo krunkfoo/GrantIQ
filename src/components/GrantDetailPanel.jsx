@@ -73,6 +73,9 @@ export default function GrantDetailPanel({
   const [contactDraft, setContactDraft]     = useState(grant.contact ?? {})
   const [notes, setNotes]                   = useState(grant.notes ?? '')
   const [notesSaved, setNotesSaved]         = useState(false)
+  const [emailBody, setEmailBody]           = useState(grant.draftEmail?.body ?? '')
+  const [emailEditing, setEmailEditing]     = useState(false)
+  const [copied, setCopied]                 = useState(false)
 
   // Esc to close
   useEffect(() => {
@@ -90,6 +93,19 @@ export default function GrantDetailPanel({
     onPatch?.(grant.id, { notes })
     setNotesSaved(true)
     setTimeout(() => setNotesSaved(false), 2000)
+  }
+
+  const copyEmail = () => {
+    navigator.clipboard.writeText(emailBody)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const openInMail = () => {
+    const to  = grant.draftEmail?.to?.match(/<(.+)>/)?.[1] ?? grant.contact?.email ?? ''
+    const sub = encodeURIComponent(grant.draftEmail?.subject ?? '')
+    const bod = encodeURIComponent(emailBody)
+    window.location.href = `mailto:${to}?subject=${sub}&body=${bod}`
   }
 
 
@@ -148,6 +164,67 @@ export default function GrantDetailPanel({
             <div className="dp-big-val">{grant.estValue || '—'}</div>
             {grant.valueNote && <div className="dp-big-sub">{grant.valueNote}</div>}
           </div>
+
+          {/* ── Ready-to-send email ── hero section for eligible grants */}
+          {!isIneligible && grant.draftEmail && (
+            <div className="dp-section" style={{
+              background: 'var(--bg-sunk)', borderRadius: 'var(--radius)',
+              padding: '16px', margin: '0 -2px', border: '1px solid var(--border)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <h4 style={{ margin: 0 }}>Ready to send</h4>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-sm" onClick={() => setEmailEditing(v => !v)}>
+                    {emailEditing ? 'Done' : 'Edit'}
+                  </button>
+                  <button className="btn btn-sm" onClick={copyEmail}>
+                    {copied ? '✓ Copied' : 'Copy'}
+                  </button>
+                  <button className="btn btn-sm btn-primary" onClick={openInMail}>
+                    Open in Mail ↗
+                  </button>
+                </div>
+              </div>
+
+              <div style={{
+                background: 'var(--bg-panel)', border: '1px solid var(--border)',
+                borderRadius: 'calc(var(--radius) - 2px)', overflow: 'hidden',
+              }}>
+                <div style={{
+                  padding: '10px 14px', borderBottom: '1px solid var(--border)',
+                  display: 'flex', flexDirection: 'column', gap: 4,
+                }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)', width: 42, flexShrink: 0 }}>To</span>
+                    <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{grant.draftEmail.to}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)', width: 42, flexShrink: 0 }}>Subject</span>
+                    <span style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>{grant.draftEmail.subject}</span>
+                  </div>
+                </div>
+                <div style={{ padding: '12px 14px' }}>
+                  {emailEditing
+                    ? <textarea
+                        value={emailBody}
+                        onChange={e => setEmailBody(e.target.value)}
+                        style={{
+                          width: '100%', border: 0, outline: 'none', resize: 'none',
+                          fontFamily: 'inherit', fontSize: 13, lineHeight: 1.65,
+                          color: 'var(--ink-2)', background: 'transparent', minHeight: 180,
+                        }}
+                      />
+                    : <pre style={{
+                        margin: 0, fontFamily: 'inherit', fontSize: 13,
+                        lineHeight: 1.65, color: 'var(--ink-2)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                      }}>
+                        {emailBody}
+                      </pre>
+                  }
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Why ineligible */}
           {isIneligible && grant.ineligibleReason && (
