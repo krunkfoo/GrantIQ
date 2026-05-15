@@ -345,6 +345,12 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
     persist(grantId, { workflowStatus })
   }, [updateGrant, persist])
 
+  // Generic patch — for contact edits, notes, etc.
+  const handlePatch = useCallback((grantId, changes) => {
+    updateGrant(grantId, changes)
+    persist(grantId, changes)
+  }, [updateGrant, persist])
+
 
   const handleChecklistToggle = useCallback((grantId, itemIndex, done) => {
     setGrants(prev => prev.map(g => {
@@ -564,6 +570,7 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
           onClose={() => setSelectedGrant(null)}
           onStatusChange={handleStatusChange}
           onChecklistToggle={handleChecklistToggle}
+          onPatch={handlePatch}
         />
       )}
     </div>

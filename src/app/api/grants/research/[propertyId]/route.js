@@ -19,6 +19,22 @@ const BUDGET_LABELS = {
   '>3m': 'over $3,000,000',
 }
 
+function fillPlaceholders(grants, property) {
+  const city = property.city?.split(',')[0]?.trim() ?? property.city ?? ''
+  const map = {
+    '{{CITY}}': city,
+    '{{ADDRESS}}': property.address ?? '',
+    '{{STATE}}': 'California',
+    '{CITY}': city,
+    '{ADDRESS}': property.address ?? '',
+  }
+  let text = JSON.stringify(grants)
+  for (const [k, v] of Object.entries(map)) {
+    text = text.replaceAll(k, v)
+  }
+  return JSON.parse(text)
+}
+
 function buildPrompt(property) {
   const budget = BUDGET_LABELS[property.budget] ?? property.budget ?? 'not yet determined'
   const today = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
@@ -40,7 +56,7 @@ Rules:
 2. Include state programs (CA State Historic Tax Credit, CalOSBA, CDFI programs, etc.)
 3. Include city/county programs SPECIFIC to this jurisdiction (SF Shines, Richmond grants, Sonoma TIF, etc.). Only include local programs that actually exist for this city/county — do not invent programs.
 4. Flag ineligible programs with exact reasons (wrong jurisdiction, wrong property type, wrong use, etc.)
-5. Use real contacts: actual program administrator names, emails, phone numbers, and application URLs where you know them. Mark as "Confirm current contact" if uncertain.
+5. Use real contacts: actual program administrator names, emails, phone numbers, and application URLs where you know them. Mark as "Confirm current contact" if uncertain. NEVER use placeholder text like {{CITY}}, {{ADDRESS}}, [City], [Name], etc. — always use the actual values from the property details above.
 6. Be specific about dollar amounts. Use ranges. Never say "varies" without a range.
 7. Rank eligible grants by est. value (highest first).
 8. Return at most 12 grants total. Prioritize the highest-value eligible programs; lump minor ineligible programs into a single "Other programs reviewed — ineligible" entry if needed.
@@ -152,6 +168,9 @@ export async function POST(req, { params }) {
         throw new Error(`JSON parse failed after ${raw.length} chars (stop_reason=${message.stop_reason}): ${parseErr.message}`)
       }
     }
+
+    // Replace any {{PLACEHOLDER}} variables Claude emitted with real values
+    grants = fillPlaceholders(grants, property)
 
     // Save researched grants to workbook
     await db.update(grantWorkbooks)

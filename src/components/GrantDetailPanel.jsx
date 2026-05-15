@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 
-const WORKFLOW_STATUSES = ['Not started', 'Draft email ready', 'Contact made', 'Sent', 'Replied']
+const WORKFLOW_STATUSES = ['Not started', 'Contact made', 'Applied', 'Approved', 'Not pursuing']
 
 /* ── mini icons ──────────────────────────────────────────── */
 
@@ -67,8 +67,12 @@ function statusBadgeClass(status) {
 
 export default function GrantDetailPanel({
   grant, demo,
-  onClose, onStatusChange, onChecklistToggle,
+  onClose, onStatusChange, onChecklistToggle, onPatch,
 }) {
+  const [editingContact, setEditingContact] = useState(false)
+  const [contactDraft, setContactDraft]     = useState(grant.contact ?? {})
+  const [notes, setNotes]                   = useState(grant.notes ?? '')
+  const [notesSaved, setNotesSaved]         = useState(false)
 
   // Esc to close
   useEffect(() => {
@@ -76,6 +80,17 @@ export default function GrantDetailPanel({
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
   }, [onClose])
+
+  const saveContact = () => {
+    onPatch?.(grant.id, { contact: contactDraft })
+    setEditingContact(false)
+  }
+
+  const saveNotes = () => {
+    onPatch?.(grant.id, { notes })
+    setNotesSaved(true)
+    setTimeout(() => setNotesSaved(false), 2000)
+  }
 
 
   const isIneligible  = grant.status === 'ineligible'
@@ -106,6 +121,16 @@ export default function GrantDetailPanel({
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-4)' }}>
                   Due {grant.deadline}
                 </span>
+              )}
+              {grant.applicationLink && (
+                <a
+                  href={grant.applicationLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: 11.5, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Program page ↗
+                </a>
               )}
             </div>
           </div>
@@ -204,10 +229,46 @@ export default function GrantDetailPanel({
           )}
 
 
-          {/* Key contact */}
-          {grant.contact && (
-            <div className="dp-section">
-              <h4>Key contact</h4>
+          {/* Key contact — editable */}
+          <div className="dp-section">
+            <h4 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              Key contact
+              {!demo && (
+                <button
+                  className="btn btn-sm btn-ghost"
+                  style={{ fontWeight: 400, fontSize: 11 }}
+                  onClick={() => { setContactDraft(grant.contact ?? {}); setEditingContact(v => !v) }}
+                >
+                  {editingContact ? 'Cancel' : 'Edit'}
+                </button>
+              )}
+            </h4>
+
+            {editingContact ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[
+                  { key: 'name',  label: 'Name',    placeholder: 'First Last' },
+                  { key: 'title', label: 'Title',   placeholder: 'Program Officer' },
+                  { key: 'email', label: 'Email',   placeholder: 'name@agency.gov' },
+                  { key: 'phone', label: 'Phone',   placeholder: '(510) 555-0100' },
+                  { key: 'url',   label: 'Link',    placeholder: 'https://...' },
+                ].map(({ key, label, placeholder }) => (
+                  <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <span style={{ fontSize: 11, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+                    <input
+                      value={contactDraft[key] ?? ''}
+                      onChange={e => setContactDraft(d => ({ ...d, [key]: e.target.value }))}
+                      placeholder={placeholder}
+                      className="giq-input"
+                      style={{ fontSize: 13 }}
+                    />
+                  </label>
+                ))}
+                <button className="btn btn-sm btn-primary" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={saveContact}>
+                  Save contact
+                </button>
+              </div>
+            ) : (
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                 <div style={{
                   width: 32, height: 32, borderRadius: '50%',
@@ -215,23 +276,63 @@ export default function GrantDetailPanel({
                   display: 'grid', placeItems: 'center',
                   fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 13, flexShrink: 0,
                 }}>
-                  {grant.contact.name?.charAt(0) ?? '?'}
+                  {(contactDraft.name || grant.contact?.name)?.charAt(0) ?? '?'}
                 </div>
-                <div>
-                  <div style={{ fontWeight: 500, fontSize: 13.5 }}>{grant.contact.name}</div>
-                  {grant.contact.title && (
-                    <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>{grant.contact.title}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500, fontSize: 13.5 }}>
+                    {contactDraft.name || grant.contact?.name || <span style={{ color: 'var(--ink-4)' }}>No contact — click Edit to add</span>}
+                  </div>
+                  {(contactDraft.title || grant.contact?.title) && (
+                    <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>{contactDraft.title || grant.contact?.title}</div>
                   )}
-                  {grant.contact.email && (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)', marginTop: 6 }}>
-                      {grant.contact.email}
-                    </div>
+                  {(contactDraft.email || grant.contact?.email) && (
+                    <a
+                      href={`mailto:${contactDraft.email || grant.contact?.email}`}
+                      style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent)', marginTop: 6, textDecoration: 'none' }}
+                    >
+                      {contactDraft.email || grant.contact?.email}
+                    </a>
                   )}
-                  {grant.contact.phone && (
-                    <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>{grant.contact.phone}</div>
+                  {(contactDraft.phone || grant.contact?.phone) && (
+                    <a
+                      href={`tel:${(contactDraft.phone || grant.contact?.phone).replace(/\D/g, '')}`}
+                      style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textDecoration: 'none' }}
+                    >
+                      {contactDraft.phone || grant.contact?.phone}
+                    </a>
+                  )}
+                  {(contactDraft.url || grant.applicationLink) && (
+                    <a
+                      href={contactDraft.url || grant.applicationLink}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'block', fontSize: 12, color: 'var(--accent)', marginTop: 4, textDecoration: 'none' }}
+                    >
+                      Program page ↗
+                    </a>
                   )}
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Notes / corrections */}
+          {!demo && (
+            <div className="dp-section">
+              <h4>Notes &amp; corrections</h4>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                className="giq-textarea"
+                placeholder="Add context about this property, correct any info Claude got wrong, or note next steps…"
+                rows={4}
+              />
+              <button
+                className="btn btn-sm"
+                style={{ marginTop: 8, alignSelf: 'flex-start' }}
+                onClick={saveNotes}
+              >
+                {notesSaved ? '✓ Saved' : 'Save note'}
+              </button>
             </div>
           )}
 
