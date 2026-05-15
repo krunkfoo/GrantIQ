@@ -43,7 +43,8 @@ Rules:
 5. Use real contacts: actual program administrator names, emails, phone numbers, and application URLs where you know them. Mark as "Confirm current contact" if uncertain.
 6. Be specific about dollar amounts. Use ranges. Never say "varies" without a range.
 7. Rank eligible grants by est. value (highest first).
-8. Keep checklist labels SHORT (under 8 words each). Keep steps SHORT (1 sentence each). Max 5 steps and 5 checklist items per grant.
+8. Return at most 12 grants total. Prioritize the highest-value eligible programs; lump minor ineligible programs into a single "Other programs reviewed — ineligible" entry if needed.
+9. Keep checklist labels SHORT (under 8 words each). Keep steps SHORT (1 sentence each). Max 4 steps and 4 checklist items per grant. Max 2 eligibilityChecks per grant.
 
 Return a JSON array. Each element must match this EXACT schema (no extra fields):
 {
@@ -105,12 +106,16 @@ export async function POST(req, { params }) {
     .where(eq(grantWorkbooks.id, workbook.id))
 
   try {
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
-      betas: ['output-128k-2025-02-19'],
-      messages: [{ role: 'user', content: buildPrompt(property) }],
-    })
+    const message = await client.messages.create(
+      {
+        model: 'claude-sonnet-4-6',
+        max_tokens: 16000,
+        messages: [{ role: 'user', content: buildPrompt(property) }],
+      },
+      {
+        headers: { 'anthropic-beta': 'output-128k-2025-02-19' },
+      }
+    )
 
     const raw = message.content[0].text.trim()
 

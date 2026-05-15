@@ -10,11 +10,10 @@ const STEPS = [
   { label: 'Searching federal Historic Tax Credit programs…', meta: 'nps.gov/htc' },
   { label: 'Scanning California state incentive programs…', meta: 'ohp.parks.ca.gov' },
   { label: 'Checking city and county grant boundaries…',   meta: 'ci.richmond.ca.us' },
-  { label: 'Matching SF / local small business grants…',   meta: 'oewd.org' },
+  { label: 'Matching local small business grants…',        meta: 'oewd.org' },
   { label: 'Researching SBA and CDFI financing programs…', meta: 'sba.gov' },
   { label: 'Evaluating ADA and regulatory cost savings…',  meta: 'ada.gov' },
   { label: 'Identifying consultant firms in your area…',   meta: 'directory.match()' },
-  { label: 'Drafting outreach emails…',                    meta: 'compose.draft' },
   { label: 'Building your grant workbook…',                meta: 'workbook.build' },
 ]
 
@@ -63,7 +62,7 @@ export default function ResearchingLoader({ propertyId, address }) {
       })
       .catch(err => {
         clearInterval(interval)
-        setError(`Research failed: ${err.message}. Check that ANTHROPIC_API_KEY is set in your deployment.`)
+        setError(`Research failed: ${err.message}`)
       })
 
     return () => clearInterval(interval)
@@ -147,7 +146,7 @@ export default function ResearchingLoader({ propertyId, address }) {
           color: 'var(--ink-4)', fontSize: 12,
         }}>
           <SparkleSVG />
-          You don't have to wait — we'll email when it's ready.
+          This takes about 30–60 seconds — feel free to come back.
         </div>
       </div>
     </div>
