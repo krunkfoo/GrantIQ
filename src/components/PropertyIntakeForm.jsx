@@ -122,6 +122,51 @@ export default function PropertyIntakeForm() {
           address and project scope — usually in under two minutes.
         </p>
 
+        {/* Progress indicator */}
+        {(() => {
+          const steps = [
+            { label: 'Address', done: address.length > 4 },
+            { label: 'Type', done: !!propertyType },
+            { label: 'Scope', done: scope.length > 5 },
+            { label: 'Review', done: false },
+          ]
+          const completedSteps = steps.filter(s => s.done).length
+          return (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 28 }}>
+              {steps.map((step, i) => (
+                <div key={step.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    color: step.done ? 'var(--accent, #4f7396)' : i === completedSteps ? 'var(--ink-2, #444)' : 'var(--ink-4, #aaa)',
+                    fontSize: 12, fontWeight: step.done || i === completedSteps ? 600 : 400,
+                  }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                      background: step.done ? 'var(--accent, #4f7396)' : i === completedSteps ? 'var(--border, #e0e0e0)' : 'var(--bg-sunk, #f5f5f5)',
+                      border: `1.5px solid ${step.done ? 'var(--accent, #4f7396)' : 'var(--border, #ddd)'}`,
+                      display: 'grid', placeItems: 'center',
+                      color: step.done ? 'white' : 'var(--ink-3)',
+                      fontSize: 10,
+                    }}>
+                      {step.done
+                        ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5 3.5-4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                        : i + 1
+                      }
+                    </div>
+                    {step.label}
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div style={{
+                      width: 20, height: 1.5,
+                      background: step.done ? 'var(--accent, #4f7396)' : 'var(--border, #ddd)',
+                    }} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+
         {/* Property address */}
         <div className="field">
           <div className="lbl">Property address</div>
@@ -134,6 +179,7 @@ export default function PropertyIntakeForm() {
               placeholder="123 Main St"
               className="giq-input"
               autoComplete="off"
+              autoFocus
             />
           </div>
         </div>

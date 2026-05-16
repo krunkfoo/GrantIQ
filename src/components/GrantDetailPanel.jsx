@@ -1,35 +1,36 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const WORKFLOW_STATUSES = ['Not started', 'Contact made', 'Applied', 'Approved', 'Not pursuing']
 
 /* ── mini icons ──────────────────────────────────────────── */
 
-function CheckIcon({ pass }) {
+function CheckIcon({ pass, label }) {
+  const title = label ? `${label}: ${pass === true ? 'Passes' : pass === false ? 'Fails' : 'Unknown'}` : undefined
   if (pass === true) return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }} title={title}>
       <circle cx="7" cy="7" r="7" fill="oklch(0.96 0.03 150)"/>
       <path d="M4 7l2 2 4-4" stroke="oklch(0.42 0.09 150)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
   if (pass === false) return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }} title={title}>
       <circle cx="7" cy="7" r="7" fill="oklch(0.97 0.025 25)"/>
       <path d="M4.5 4.5l5 5M9.5 4.5l-5 5" stroke="oklch(0.58 0.16 25)" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   )
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }} title={title}>
       <circle cx="7" cy="7" r="7" fill="oklch(0.97 0.04 85)"/>
       <path d="M7 4v3.5M7 9.5v.5" stroke="oklch(0.45 0.10 70)" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   )
 }
 
-function DpCheckbox({ checked }) {
+function DpCheckbox({ checked, animating }) {
   return (
-    <div className="dp-cbox">
+    <div className={`dp-cbox${animating ? ' dp-cbox-pop' : ''}`}>
       {checked && (
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
           <path d="M2 5l2.5 2.5 3.5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -63,7 +64,7 @@ function statusBadgeClass(status) {
   return 'badge'
 }
 
-/* ── main component ──────────────────────────────────────── */
+/* ── fill hook ───────────────────────────────────────────── */
 
 function useFill(property) {
   return (text) => {
@@ -80,8 +81,10 @@ function useFill(property) {
   }
 }
 
+/* ── main component ──────────────────────────────────────── */
+
 export default function GrantDetailPanel({
-  grant, demo, property,
+  grant, demo, property, openAt,
   onClose, onStatusChange, onChecklistToggle, onPatch,
 }) {
   const fill = useFill(property)
@@ -92,15 +95,32 @@ export default function GrantDetailPanel({
   const [emailBody, setEmailBody]           = useState(() => fill(grant.draftEmail?.body ?? ''))
   const [emailEditing, setEmailEditing]     = useState(false)
   const [copied, setCopied]                 = useState(false)
-  const [expandedStep, setExpandedStep]     = useState(null) // index of expanded step
-  const [stepDetail, setStepDetail]         = useState({})   // { [index]: { loading, bullets } }
+  const [expandedStep, setExpandedStep]     = useState(null)
+  const [stepDetail, setStepDetail]         = useState({})
+  const [animatingIdx, setAnimatingIdx]     = useState(null)
 
-  // Esc to close
+  const emailRef    = useRef(null)
+  const bodyRef     = useRef(null)
+
+  // Scroll to email section if openAt === 'email'
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [onClose])
+    if (openAt === 'email' && emailRef.current) {
+      setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+    }
+  }, [openAt])
+
+  // Reset state when grant changes
+  useEffect(() => {
+    setContactDraft(grant.contact ?? {})
+    setNotes(grant.notes ?? '')
+    setEmailBody(fill(grant.draftEmail?.body ?? ''))
+    setEmailEditing(false)
+    setExpandedStep(null)
+    setStepDetail({})
+    // Scroll panel body to top
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grant.id])
 
   const saveContact = () => {
     onPatch?.(grant.id, { contact: contactDraft })
@@ -114,7 +134,9 @@ export default function GrantDetailPanel({
   }
 
   const copyEmail = () => {
-    navigator.clipboard.writeText(emailBody)
+    const subject = fill(grant.draftEmail?.subject ?? '')
+    const text = subject ? `Subject: ${subject}\n\n${emailBody}` : emailBody
+    navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -126,10 +148,24 @@ export default function GrantDetailPanel({
     window.location.href = `mailto:${to}?subject=${sub}&body=${bod}`
   }
 
+  const markAllDone = () => {
+    const undone = (grant.checklist || []).reduce((acc, item, i) => {
+      if (!item.done) acc.push(i)
+      return acc
+    }, [])
+    undone.forEach(i => onChecklistToggle(grant.id, i, true))
+  }
+
+  const handleChecklistClick = (i, currentDone) => {
+    setAnimatingIdx(i)
+    setTimeout(() => setAnimatingIdx(null), 350)
+    onChecklistToggle(grant.id, i, !currentDone)
+  }
+
   const handleStepClick = async (step, index) => {
     if (expandedStep === index) { setExpandedStep(null); return }
     setExpandedStep(index)
-    if (stepDetail[index]) return // already loaded
+    if (stepDetail[index]) return
     setStepDetail(d => ({ ...d, [index]: { loading: true } }))
 
     if (demo) {
@@ -155,13 +191,19 @@ export default function GrantDetailPanel({
     }
   }
 
-
   const isIneligible  = grant.status === 'ineligible'
   const checkedCount  = (grant.checklist || []).filter(c => c.done).length
+  const totalCount    = (grant.checklist || []).length
   const history       = grant.statusHistory || []
+  const firmInitial   = grant.hireRecommendation?.firm?.charAt(0) ?? '?'
 
-  // Initials for firm avatar
-  const firmInitial = grant.hireRecommendation?.firm?.charAt(0) ?? '?'
+  // Flag unverified contacts: no email OR contact came from AI with placeholder-like info
+  const contact         = contactDraft.name ? contactDraft : grant.contact
+  const contactVerified = contact?.email && !contact.email.includes('example') && !contact.email.includes('confirm')
+  const showUnverified  = contact?.name && !contactVerified
+
+  // Extract email address for mailto link
+  const emailTo = grant.draftEmail?.to?.match(/<(.+)>/)?.[1] ?? grant.contact?.email ?? grant.draftEmail?.to ?? ''
 
   return (
     <>
@@ -203,18 +245,20 @@ export default function GrantDetailPanel({
         </div>
 
         {/* ── dp-body ── */}
-        <div className="dp-body">
+        <div className="dp-body" ref={bodyRef}>
 
           {/* Estimated value */}
           <div className="dp-section">
             <h4>Estimated value</h4>
-            <div className="dp-big-val">{grant.estValue || '—'}</div>
+            <div className="dp-big-val">
+              {grant.estValueNum === 0 ? 'Variable' : (grant.estValue || '—')}
+            </div>
             {grant.valueNote && <div className="dp-big-sub">{grant.valueNote}</div>}
           </div>
 
           {/* ── Ready-to-send email ── hero section for eligible grants */}
           {!isIneligible && grant.draftEmail && (
-            <div className="dp-section" style={{
+            <div ref={emailRef} className="dp-section" style={{
               background: 'var(--bg-sunk)', borderRadius: 'var(--radius)',
               padding: '16px', margin: '0 -2px', border: '1px solid var(--border)',
             }}>
@@ -224,7 +268,7 @@ export default function GrantDetailPanel({
                   <button className="btn btn-sm" onClick={() => setEmailEditing(v => !v)}>
                     {emailEditing ? 'Done' : 'Edit'}
                   </button>
-                  <button className="btn btn-sm" onClick={copyEmail}>
+                  <button className="btn btn-sm" onClick={copyEmail} title="Copy subject + body to clipboard">
                     {copied ? '✓ Copied' : 'Copy'}
                   </button>
                   <button className="btn btn-sm btn-primary" onClick={openInMail}>
@@ -243,7 +287,15 @@ export default function GrantDetailPanel({
                 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)', width: 42, flexShrink: 0 }}>To</span>
-                    <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{grant.draftEmail.to}</span>
+                    {emailTo
+                      ? <a
+                          href={`mailto:${emailTo}`}
+                          style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none' }}
+                        >
+                          {grant.draftEmail.to}
+                        </a>
+                      : <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{grant.draftEmail.to}</span>
+                    }
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)', width: 42, flexShrink: 0 }}>Subject</span>
@@ -304,8 +356,8 @@ export default function GrantDetailPanel({
               <h4>Eligibility</h4>
               <div className="dp-checklist">
                 {grant.eligibilityChecks.map((c, i) => (
-                  <div key={i} className="dp-ci" style={{ cursor: 'default' }}>
-                    <CheckIcon pass={c.pass} />
+                  <div key={i} className="dp-ci" style={{ cursor: 'default' }} title={c.label}>
+                    <CheckIcon pass={c.pass} label={c.label} />
                     <span style={{ flex: 1, color: c.pass === false ? 'var(--st-bad)' : 'var(--ink-2)' }}>
                       {c.label}
                     </span>
@@ -318,11 +370,22 @@ export default function GrantDetailPanel({
           {/* Pre-app checklist */}
           {(grant.checklist || []).length > 0 && (
             <div className="dp-section">
-              <h4>
-                Pre-application checklist
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)', marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
-                  {checkedCount}/{grant.checklist.length}
+              <h4 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>
+                  Pre-application checklist
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)', marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
+                    {checkedCount}/{totalCount}
+                  </span>
                 </span>
+                {checkedCount < totalCount && (
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ fontWeight: 400, fontSize: 11 }}
+                    onClick={markAllDone}
+                  >
+                    Mark all done
+                  </button>
+                )}
               </h4>
               <div className="dp-checklist">
                 {grant.checklist.map((item, i) => (
@@ -330,10 +393,17 @@ export default function GrantDetailPanel({
                     key={i}
                     className={`dp-ci${item.done ? ' done' : ''}`}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => onChecklistToggle(grant.id, i, !item.done)}
+                    onClick={() => handleChecklistClick(i, item.done)}
                   >
-                    <DpCheckbox checked={item.done} />
-                    <span style={{ flex: 1 }}>{item.label}</span>
+                    <DpCheckbox checked={item.done} animating={animatingIdx === i && !item.done} />
+                    <span style={{
+                      flex: 1,
+                      textDecoration: item.done ? 'line-through' : 'none',
+                      color: item.done ? 'var(--ink-4)' : 'var(--ink-2)',
+                      transition: 'color 0.2s, text-decoration 0.2s',
+                    }}>
+                      {item.label}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -394,7 +464,17 @@ export default function GrantDetailPanel({
           {/* Key contact — editable */}
           <div className="dp-section">
             <h4 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              Key contact
+              <span>
+                Key contact
+                {showUnverified && (
+                  <span
+                    title="Contact details may need verification — check the program page"
+                    style={{ marginLeft: 6, fontSize: 12, cursor: 'help' }}
+                  >
+                    ⚠
+                  </span>
+                )}
+              </span>
               {!demo && (
                 <button
                   className="btn btn-sm btn-ghost"
@@ -498,10 +578,10 @@ export default function GrantDetailPanel({
             </div>
           )}
 
-          {/* Hire a firm */}
+          {/* Who can help */}
           {grant.hireRecommendation?.needed && (
             <div className="dp-section">
-              <h4>Hire a firm</h4>
+              <h4>Who can help</h4>
               <div className="firm-card">
                 <div className="firm-name">
                   <div style={{

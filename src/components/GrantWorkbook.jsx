@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import GrantDetailPanel from './GrantDetailPanel.jsx'
 
@@ -17,6 +17,31 @@ function typeBadge(type) {
   if (type === 'Federal') return 'badge-sq federal'
   if (type === 'State')   return 'badge-sq state'
   return 'badge-sq city'
+}
+
+function exportCSV(grants, property) {
+  const headers = ['Grant name', 'Type', 'Status', 'Est. value', 'Deadline', 'Contact name', 'Contact email', 'Use for', 'Application link']
+  const rows = grants.map(g => [
+    g.name,
+    g.type,
+    g.status,
+    g.estValue || '',
+    g.deadline || '',
+    g.contact?.name || '',
+    g.contact?.email || '',
+    g.useFor || '',
+    g.applicationLink || '',
+  ])
+  const csv = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = `${property.address.replace(/[^a-z0-9]/gi, '_')}_grants.csv`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 /* ── inline SVG icons ────────────────────────────────────── */
@@ -116,34 +141,71 @@ const Icons = {
       <path d="M7.5 7.5L10 10"/>
     </svg>
   ),
+  arrowLeft: (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 2L4 7l5 5"/>
+    </svg>
+  ),
+  arrowRight: (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 2l5 5-5 5"/>
+    </svg>
+  ),
 }
 
 /* ── eligibility mini-icons ──────────────────────────────── */
 
-function PfIcon({ pass }) {
+function PfIcon({ pass, label }) {
+  const title = label ? `${label}: ${pass === true ? 'Passes' : pass === false ? 'Fails' : 'Unknown'}` : undefined
   if (pass === true) return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }} title={title}>
       <circle cx="6.5" cy="6.5" r="6.5" fill="oklch(0.96 0.03 150)"/>
       <path d="M3.5 6.5l2 2 4-4" stroke="oklch(0.42 0.09 150)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
   if (pass === false) return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }} title={title}>
       <circle cx="6.5" cy="6.5" r="6.5" fill="oklch(0.97 0.025 25)"/>
       <path d="M4 4l5 5M9 4l-5 5" stroke="oklch(0.58 0.16 25)" strokeWidth="1.4" strokeLinecap="round"/>
     </svg>
   )
   return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }} title={title}>
       <circle cx="6.5" cy="6.5" r="6.5" fill="oklch(0.97 0.04 85)"/>
       <path d="M6.5 3.5v4M6.5 9v.5" stroke="oklch(0.45 0.10 70)" strokeWidth="1.4" strokeLinecap="round"/>
     </svg>
   )
 }
 
+/* ── Checklist mini progress bar ─────────────────────────── */
+
+function MiniProgress({ done, total }) {
+  if (!total) return <span style={{ color: 'var(--ink-5)' }}>—</span>
+  const pct = total > 0 ? (done / total) * 100 : 0
+  const all = done === total
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 56 }}>
+      <div style={{
+        flex: 1, height: 4, borderRadius: 2,
+        background: 'var(--bg-sunk)',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          height: '100%', borderRadius: 2, width: `${pct}%`,
+          background: all ? 'oklch(0.55 0.14 150)' : 'var(--accent)',
+          transition: 'width 0.3s ease',
+        }} />
+      </div>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-4)', flexShrink: 0 }}>
+        {done}/{total}
+      </span>
+    </div>
+  )
+}
+
 /* ── Workbook table ──────────────────────────────────────── */
 
-function WorkbookTable({ filtered, onSelect }) {
+function WorkbookTable({ filtered, onSelect, onSelectAtEmail }) {
   return (
     <div className="workbook-wrap">
       <table className="workbook">
@@ -166,11 +228,15 @@ function WorkbookTable({ filtered, onSelect }) {
         <tbody>
           {filtered.map(g => {
             const isIneligible = g.status === 'ineligible'
+            const checkedCount = (g.checklist || []).filter(c => c.done).length
+            const totalCount   = (g.checklist || []).length
+            const isStuck      = !isIneligible && totalCount > 0 && checkedCount === 0
+              && (!g.workflowStatus || g.workflowStatus === 'Not started')
             return (
               <tr
                 key={g.id}
                 onClick={() => onSelect(g)}
-                className={isIneligible ? 'row-ineligible' : ''}
+                className={`${isIneligible ? 'row-ineligible' : ''}${isStuck ? ' row-stuck' : ''}`}
               >
                 <td className="col-name">
                   <div className="gname">{g.name}</div>
@@ -181,13 +247,13 @@ function WorkbookTable({ filtered, onSelect }) {
                 <td>
                   <span className={typeBadge(g.type)}>{g.type}</span>
                 </td>
-                <td className="col-value">{isIneligible ? '—' : (g.estValue || '—')}</td>
+                <td className="col-value">{isIneligible ? '—' : (g.estValue || (g.estValueNum === 0 ? 'Variable' : '—'))}</td>
                 <td className="col-use">{g.useFor}</td>
                 <td className="col-elig">
                   <div className="pf">
                     {(g.eligibilityChecks || []).slice(0, 5).map((c, i) => (
-                      <div key={i} className={`pf-row${c.pass === false ? ' fail' : ''}`}>
-                        <PfIcon pass={c.pass} />
+                      <div key={i} className={`pf-row${c.pass === false ? ' fail' : ''}`} title={c.label}>
+                        <PfIcon pass={c.pass} label={c.label} />
                         {c.label}
                       </div>
                     ))}
@@ -199,19 +265,21 @@ function WorkbookTable({ filtered, onSelect }) {
                   </div>
                 </td>
                 <td className="col-mono">
-                  {g.checklist?.length > 0
-                    ? `${g.checklist.filter(c => c.done).length}/${g.checklist.length}`
-                    : '—'}
+                  <MiniProgress done={checkedCount} total={totalCount} />
                 </td>
                 <td className="col-mono">{g.steps?.length || '—'}</td>
-                <td className="col-mono">
+                <td
+                  className="col-mono"
+                  onClick={e => { e.stopPropagation(); g.draftEmail && onSelectAtEmail(g) }}
+                  style={{ cursor: g.draftEmail ? 'pointer' : 'default' }}
+                >
                   {g.draftEmail
-                    ? <span className="tbtn sent">{Icons.mail} Ready</span>
+                    ? <span className="tbtn sent" title="Click to open email">{Icons.mail} Ready</span>
                     : '—'}
                 </td>
                 <td className="col-mono">
-                  {g.link
-                    ? <a href={g.link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                  {g.applicationLink
+                    ? <a href={g.applicationLink} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
                         {Icons.link} ↗
                       </a>
                     : '—'}
@@ -270,7 +338,7 @@ function CardGrid({ filtered, onSelect }) {
 
               {!isIneligible && (
                 <div className="gc-value">
-                  <span className="v">{g.estValue || '—'}</span>
+                  <span className="v">{g.estValue || (g.estValueNum === 0 ? 'Variable' : '—')}</span>
                   <span className="vlbl">estimated</span>
                 </div>
               )}
@@ -284,8 +352,8 @@ function CardGrid({ filtered, onSelect }) {
               {(g.eligibilityChecks || []).length > 0 && (
                 <div className="gc-pf">
                   {g.eligibilityChecks.slice(0, 4).map((c, i) => (
-                    <div key={i} className={`gc-pf-row${c.pass === false ? ' fail' : ''}`}>
-                      <PfIcon pass={c.pass} />
+                    <div key={i} className={`gc-pf-row${c.pass === false ? ' fail' : ''}`} title={c.label}>
+                      <PfIcon pass={c.pass} label={c.label} />
                       {c.label}
                     </div>
                   ))}
@@ -313,7 +381,23 @@ function CardGrid({ filtered, onSelect }) {
   )
 }
 
-/* ── Consultants view ────────────────────────────────────── */
+/* ── Consultants view (grouped by specialty) ─────────────── */
+
+const SPECIALTY_KEYWORDS = {
+  'Historic Preservation': ['historic', 'preservation', 'heritage', 'nhtp', 'shpo'],
+  'Seismic / Structural': ['seismic', 'structural', 'engineering', 'geotechnical'],
+  'Architecture': ['architect', 'design', 'facade', 'restoration'],
+  'Grant Writing': ['grant', 'writer', 'writing', 'funding', 'proposal'],
+  'Tax Credits': ['tax credit', 'htc', 'nmtc', 'cpa', 'accounting'],
+}
+
+function detectSpecialty(reason = '') {
+  const lower = reason.toLowerCase()
+  for (const [specialty, keywords] of Object.entries(SPECIALTY_KEYWORDS)) {
+    if (keywords.some(k => lower.includes(k))) return specialty
+  }
+  return 'General Consultant'
+}
 
 function ConsultantsView({ consultants, grants, onSelectGrant }) {
   if (consultants.length === 0) {
@@ -323,49 +407,67 @@ function ConsultantsView({ consultants, grants, onSelectGrant }) {
       </div>
     )
   }
+
+  // Group by specialty
+  const grouped = new Map()
+  for (const c of consultants) {
+    const specialty = detectSpecialty(c.grants[0]?.reason)
+    if (!grouped.has(specialty)) grouped.set(specialty, [])
+    grouped.get(specialty).push(c)
+  }
+
   return (
-    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 28 }}>
       <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.5 }}>
-        These firms are recommended across your grants. Click a grant to open it.
+        These firms are recommended based on your grant research. Click any grant to open it.
       </p>
-      {consultants.map(c => (
-        <div key={c.firm} style={{
-          background: 'var(--bg-panel)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)', padding: '18px 20px',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{c.firm}</div>
-              {c.contact && <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>{c.contact}</div>}
-              {c.email && (
-                <a href={`mailto:${c.email}`} style={{ fontSize: 12, color: 'var(--accent)', display: 'block', marginTop: 4, textDecoration: 'none' }}>
-                  {c.email}
-                </a>
-              )}
-            </div>
-            {c.email && (
-              <a href={`mailto:${c.email}`} className="btn btn-sm btn-primary" style={{ flexShrink: 0 }}>
-                Email firm →
-              </a>
-            )}
+      {[...grouped.entries()].map(([specialty, firms]) => (
+        <div key={specialty}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-4)', marginBottom: 10 }}>
+            {specialty}
           </div>
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {c.grants.map(g => {
-              const fullGrant = grants.find(gr => gr.id === g.id)
-              return (
-                <button
-                  key={g.id}
-                  onClick={() => fullGrant && onSelectGrant(fullGrant)}
-                  style={{
-                    textAlign: 'left', background: 'var(--bg-sunk)', border: '1px solid var(--border)',
-                    borderRadius: 'calc(var(--radius) - 2px)', padding: '10px 14px', cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)' }}>{g.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 3, lineHeight: 1.4 }}>{g.reason}</div>
-                </button>
-              )
-            })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {firms.map(c => (
+              <div key={c.firm} style={{
+                background: 'var(--bg-panel)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)', padding: '18px 20px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{c.firm}</div>
+                    {c.contact && <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 2 }}>{c.contact}</div>}
+                    {c.email && (
+                      <a href={`mailto:${c.email}`} style={{ fontSize: 12, color: 'var(--accent)', display: 'block', marginTop: 4, textDecoration: 'none' }}>
+                        {c.email}
+                      </a>
+                    )}
+                  </div>
+                  {c.email && (
+                    <a href={`mailto:${c.email}`} className="btn btn-sm btn-primary" style={{ flexShrink: 0 }}>
+                      Email firm →
+                    </a>
+                  )}
+                </div>
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {c.grants.map(g => {
+                    const fullGrant = grants.find(gr => gr.id === g.id)
+                    return (
+                      <button
+                        key={g.id}
+                        onClick={() => fullGrant && onSelectGrant(fullGrant)}
+                        style={{
+                          textAlign: 'left', background: 'var(--bg-sunk)', border: '1px solid var(--border)',
+                          borderRadius: 'calc(var(--radius) - 2px)', padding: '10px 14px', cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)' }}>{g.name}</div>
+                        <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 3, lineHeight: 1.4 }}>{g.reason}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       ))}
@@ -375,16 +477,20 @@ function ConsultantsView({ consultants, grants, onSelectGrant }) {
 
 /* ── Main component ──────────────────────────────────────── */
 
-export default function GrantWorkbook({ property, grants: initialGrants, workbookId, demo }) {
-  const [grants, setGrants] = useState(initialGrants)
+export default function GrantWorkbook({ property, grants: initialGrants, workbookId, demo, researchedAt }) {
+  const [grants, setGrants] = useState(() =>
+    [...initialGrants].sort((a, b) => (b.estValueNum || 0) - (a.estValueNum || 0))
+  )
   const [view, setView] = useState('table')
   const [mainView, setMainView] = useState('workbook') // 'workbook' | 'consultants'
   const [selectedGrant, setSelectedGrant] = useState(null)
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [openFilter, setOpenFilter] = useState('all') // All / Open / Watch / Ineligible
+  const [selectedGrantOpenAt, setSelectedGrantOpenAt] = useState(null) // 'email' | null
+  const [openFilter, setOpenFilter] = useState('open') // default to showing eligible only
   const [typeFilter, setTypeFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [rerunning, setRerunning] = useState(false)
+  const scrollRef = useRef(null)
+  const savedScrollRef = useRef(0)
 
   /* ── persistence ── */
 
@@ -407,12 +513,10 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
     persist(grantId, { workflowStatus })
   }, [updateGrant, persist])
 
-  // Generic patch — for contact edits, notes, etc.
   const handlePatch = useCallback((grantId, changes) => {
     updateGrant(grantId, changes)
     persist(grantId, changes)
   }, [updateGrant, persist])
-
 
   const handleChecklistToggle = useCallback((grantId, itemIndex, done) => {
     setGrants(prev => prev.map(g => {
@@ -431,13 +535,57 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
     if (demo || rerunning) return
     setRerunning(true)
     try {
-      // Reset status so the property page shows the loader again
       await fetch(`/api/grants/research/${property.id}`, { method: 'POST' })
       window.location.reload()
     } catch {
       setRerunning(false)
     }
   }, [demo, rerunning, property.id])
+
+  /* ── open panel with optional scroll-to section ── */
+  const openPanel = useCallback((grant, openAt = null) => {
+    if (scrollRef.current) savedScrollRef.current = scrollRef.current.scrollTop
+    setSelectedGrant(grant)
+    setSelectedGrantOpenAt(openAt)
+  }, [])
+
+  const closePanel = useCallback(() => {
+    setSelectedGrant(null)
+    setSelectedGrantOpenAt(null)
+    // Restore scroll position after paint
+    requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = savedScrollRef.current
+    })
+  }, [])
+
+  /* ── keyboard navigation ← → ── */
+  useEffect(() => {
+    const filtered = grants.filter(g => {
+      if (openFilter === 'open'       && g.status !== 'eligible') return false
+      if (openFilter === 'watch'      && g.workflowStatus !== 'Sent') return false
+      if (openFilter === 'ineligible' && g.status !== 'ineligible') return false
+      if (typeFilter === 'federal'    && g.type !== 'Federal') return false
+      if (typeFilter === 'state'      && g.type !== 'State') return false
+      if (typeFilter === 'local'      && g.type !== 'Local') return false
+      if (search && !g.name?.toLowerCase().includes(search.toLowerCase())) return false
+      return true
+    })
+
+    const handleKey = (e) => {
+      if (!selectedGrant) return
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      const idx = filtered.findIndex(g => g.id === selectedGrant.id)
+      if (e.key === 'ArrowRight' && idx < filtered.length - 1) {
+        openPanel(filtered[idx + 1])
+      }
+      if (e.key === 'ArrowLeft' && idx > 0) {
+        openPanel(filtered[idx - 1])
+      }
+      if (e.key === 'Escape') closePanel()
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [selectedGrant, grants, openFilter, typeFilter, search, openPanel, closePanel])
 
   /* ── consultants — aggregate hireRecommendation across all grants ── */
   const consultants = (() => {
@@ -474,9 +622,12 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
     return true
   })
 
-  const openCount      = grants.filter(g => g.status === 'eligible').length
-  const watchCount     = grants.filter(g => g.workflowStatus === 'Sent').length
+  const openCount       = grants.filter(g => g.status === 'eligible').length
+  const watchCount      = grants.filter(g => g.workflowStatus === 'Sent').length
   const ineligibleCount = grants.filter(g => g.status === 'ineligible').length
+
+  /* ── keyboard nav index display ── */
+  const selectedIdx = selectedGrant ? filtered.findIndex(g => g.id === selectedGrant.id) : -1
 
   return (
     <div className="giq-app">
@@ -487,8 +638,14 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
           GrantIQ
         </a>
         <div className="crumbs">
-          <span>Workspace</span>
-          <span className="sep">/</span>
+          {!demo && (
+            <>
+              <Link href="/dashboard" style={{ color: 'var(--ink-4)', textDecoration: 'none', fontSize: 13 }}>
+                Dashboard
+              </Link>
+              <span className="sep">/</span>
+            </>
+          )}
           <strong>{property.address}</strong>
         </div>
         <div className="t-spacer" />
@@ -518,6 +675,11 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
               {property.address}
             </div>
             <div className="pc-addr">{property.city}</div>
+            {researchedAt && (
+              <div style={{ fontSize: 10.5, color: 'var(--ink-5)', marginTop: 6, fontFamily: 'var(--font-mono)' }}>
+                Researched {new Date(researchedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </div>
+            )}
           </div>
 
           <div className="s-label">Workbook</div>
@@ -552,7 +714,7 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
         </aside>
 
         {/* ── Content ── */}
-        <div className="giq-content">
+        <div className="giq-content" ref={scrollRef}>
           {/* Page header */}
           <div className="page-header">
             <div className="ph-title">
@@ -584,16 +746,20 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
                 <span className="s-num">{formatValue(totalValue)}</span>
                 <span className="s-delta up">+</span>
               </div>
-              <div className="s-cell">
-                <span className="s-lbl">Sent</span>
-                <span className="s-num">{sentCount}</span>
-                <span className="s-delta">emails</span>
-              </div>
-              <div className="s-cell">
-                <span className="s-lbl">Replies</span>
-                <span className="s-num">{repliedCount}</span>
-                <span className="s-delta">received</span>
-              </div>
+              {sentCount > 0 && (
+                <div className="s-cell">
+                  <span className="s-lbl">Sent</span>
+                  <span className="s-num">{sentCount}</span>
+                  <span className="s-delta">emails</span>
+                </div>
+              )}
+              {repliedCount > 0 && (
+                <div className="s-cell">
+                  <span className="s-lbl">Replies</span>
+                  <span className="s-num">{repliedCount}</span>
+                  <span className="s-delta">received</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -604,7 +770,7 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
               {[
                 { val: 'all',        label: 'All',        cnt: grants.length },
                 { val: 'open',       label: 'Open',       cnt: openCount },
-                { val: 'watch',      label: 'Watch',      cnt: watchCount },
+                { val: 'watch',      label: 'Needs info', cnt: watchCount },
                 { val: 'ineligible', label: 'Ineligible', cnt: ineligibleCount },
               ].map(({ val, label, cnt }) => (
                 <button key={val} className={openFilter === val ? 'on' : ''} onClick={() => setOpenFilter(val)}>
@@ -641,6 +807,15 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
 
             <div className="toolbar-grow" />
 
+            {/* Keyboard nav hint when panel open */}
+            {selectedGrant && selectedIdx >= 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--ink-4)' }}>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{selectedIdx + 1}/{filtered.length}</span>
+                <span title="Previous (←)">{Icons.arrowLeft}</span>
+                <span title="Next (→)">{Icons.arrowRight}</span>
+              </div>
+            )}
+
             {/* View seg */}
             <div className="seg">
               <button className={view === 'table' ? 'on' : ''} onClick={() => setView('table')}>
@@ -651,17 +826,25 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
               </button>
             </div>
 
-            <button className="btn btn-sm">
-              Export .xlsx
+            <button className="btn btn-sm" onClick={() => exportCSV(grants, property)}>
+              Export .csv
             </button>
           </div>
 
           {/* Main view */}
           {mainView === 'consultants'
-            ? <ConsultantsView consultants={consultants} grants={grants} onSelectGrant={g => { setMainView('workbook'); setSelectedGrant(g) }} />
+            ? <ConsultantsView
+                consultants={consultants}
+                grants={grants}
+                onSelectGrant={g => { setMainView('workbook'); openPanel(g) }}
+              />
             : view === 'table'
-              ? <WorkbookTable filtered={filtered} onSelect={setSelectedGrant} />
-              : <CardGrid filtered={filtered} onSelect={setSelectedGrant} />
+              ? <WorkbookTable
+                  filtered={filtered}
+                  onSelect={g => openPanel(g)}
+                  onSelectAtEmail={g => openPanel(g, 'email')}
+                />
+              : <CardGrid filtered={filtered} onSelect={g => openPanel(g)} />
           }
         </div>
       </div>
@@ -672,7 +855,8 @@ export default function GrantWorkbook({ property, grants: initialGrants, workboo
           grant={selectedGrant}
           demo={demo}
           property={property}
-          onClose={() => setSelectedGrant(null)}
+          openAt={selectedGrantOpenAt}
+          onClose={closePanel}
           onStatusChange={handleStatusChange}
           onChecklistToggle={handleChecklistToggle}
           onPatch={handlePatch}

@@ -83,6 +83,7 @@ export default async function PropertyPage({ params }) {
       property={property}
       grants={mergedGrants}
       workbookId={workbook.id}
+      researchedAt={workbook.updatedAt ?? workbook.createdAt}
       demo={false}
     />
   )
